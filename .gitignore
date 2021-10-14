@@ -1,0 +1,26 @@
+# ignore contents of test_data directory
+oft/test_data/*
+
+# ignore pycharm project files
+/.idea
+
+# ignore all python compiled binaries
+*/__pycache__/*
+**.pyc
+
+# do not track local user settings/credentials
+oft/settings/app.py
+oft/settings/app_*.py
+oft/settings/e_key.bin
+oft/settings/e_cred.bin
+
+# ignore the output folders in schema_viz (except schema diagrams)
+schema_viz/mysql/output/*
+!schema_viz/mysql/output/diagrams
+schema_viz/mysql/output/diagrams/*
+!schema_viz/mysql/output/diagrams/summary
+schema_viz/sqlite/output/*
+!schema_viz/sqlite/output/diagrams
+schema_viz/sqlite/output/diagrams/*
+!schema_viz/sqlite/output/diagrams/summary
+/chmap/coronal_holes/tracking/results/

@@ -1,0 +1,20 @@
+name: oft
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - astropy < 4.2
+  - drms
+  - h5py
+  - matplotlib
+  - mysqlclient
+  - numpy
+  - pyhdf
+  - python >= 3.7
+  - scipy
+  - sqlalchemy-utils
+  - sunpy == 1.1.2
+  - opencv >= 3.4
+  - notebook
+  - mkdocs-material
+  - mkdocs-jupyter
