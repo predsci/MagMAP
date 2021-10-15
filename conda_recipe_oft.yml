@@ -3,18 +3,18 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - astropy < 4.2
+  - astropy
   - drms
   - h5py
   - matplotlib
   - mysqlclient
   - numpy
   - pyhdf
-  - python >= 3.7
+  - python
   - scipy
   - sqlalchemy-utils
-  - sunpy == 1.1.2
-  - opencv >= 3.4
+  - sunpy >= 3.0
+  - opencv
   - notebook
   - mkdocs-material
   - mkdocs-jupyter
