@@ -8,10 +8,10 @@ from scipy.interpolate import interp1d
 from skimage.measure import block_reduce
 import time
 
-import oft.utilities.datatypes.datatypes as psi_d_types
-from oft.settings.info import DTypes
-from oft.utilities.coord_manip import s2c
-import oft.data.corrections.lbcc.lbcc_utils as lbcc_funs
+import oftpy.utilities.datatypes.datatypes as psi_d_types
+from oftpy.settings.info import DTypes
+from oftpy.utilities.coord_manip import s2c
+import oftpy.data.corrections.lbcc.lbcc_utils as lbcc_funs
 
 
 

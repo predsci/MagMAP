@@ -3,9 +3,9 @@ import time
 
 import pandas as pd
 
-from oft.maps.util.map_manip import combine_maps
-from oft.settings.info import DTypes
-from oft.utilities.plotting import psi_plotting as Plotting
+from oftpy.maps.util.map_manip import combine_maps
+from oftpy.settings.info import DTypes
+from oftpy.utilities.plotting import psi_plotting as Plotting
 
 
 def create_combined_maps(db_session, map_data_dir, map_list, chd_map_list, methods_list,

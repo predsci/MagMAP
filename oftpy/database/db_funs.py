@@ -18,13 +18,13 @@ from scipy import interpolate
 
 from sqlalchemy import create_engine, func, or_, union_all, case, distinct
 from sqlalchemy.orm import sessionmaker, aliased
-from oft.database.db_classes import *
-from oft.data.download.euv_utils import get_metadata
-from oft.utilities.file_io import io_helpers
-from oft.data.download import euv_utils
-from oft.utilities.datatypes import datatypes
-import oft.utilities.file_io.psi_hdf as psihdf
-import oft.utilities.cred_funs as creds
+from oftpy.database.db_classes import *
+from oftpy.data.download.euv_utils import get_metadata
+from oftpy.utilities.file_io import io_helpers
+from oftpy.data.download import euv_utils
+from oftpy.utilities.datatypes import datatypes
+import oftpy.utilities.file_io.psi_hdf as psihdf
+import oftpy.utilities.cred_funs as creds
 
 
 def init_db_conn(db_type, chd_base, db_loc, db_name='chd', port="3306", user="",

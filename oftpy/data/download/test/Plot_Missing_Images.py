@@ -10,9 +10,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from oft.settings.app import App
-import oft.database.db_classes as db_class
-from oft.database.db_funs import init_db_conn_old, query_euv_images
+from oftpy.settings.app import App
+import oftpy.database.db_classes as db_class
+from oftpy.database.db_funs import init_db_conn_old, query_euv_images
 
 # query parameters
 interval_cadence = datetime.timedelta(hours=2.)

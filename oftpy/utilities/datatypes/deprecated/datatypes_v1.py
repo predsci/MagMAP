@@ -9,10 +9,10 @@ import datetime
 import sunpy.map
 import sunpy.util.metadata
 
-import oft.utilities.file_io.psi_hdf as psihdf
-import oft.database.db_classes as db
-from oft.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR
-from oft.settings.info import DTypes
+import oftpy.utilities.file_io.psi_hdf as psihdf
+import oftpy.database.db_classes as db
+from oftpy.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR
+from oftpy.settings.info import DTypes
 
 class LosImage:
     """

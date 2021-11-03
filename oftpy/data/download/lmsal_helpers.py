@@ -5,7 +5,7 @@ import h5py
 import pandas as pd
 from astropy.time import Time, TimeDelta
 
-from oft.settings.app import App
+from oftpy.settings.app import App
 
 
 def download_lmsal_index(file_write):

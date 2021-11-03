@@ -6,12 +6,12 @@ import os
 import datetime
 import numpy as np
 
-from oft.settings.app import App
-import oft.database.db_classes as db_class
-import oft.database.db_funs as db_funs
-import oft.utilities.datatypes.datatypes as psi_d_types
+from oftpy.settings.app import App
+import oftpy.database.db_classes as db_class
+import oftpy.database.db_funs as db_funs
+import oftpy.utilities.datatypes.datatypes as psi_d_types
 import matplotlib.pyplot as plt
-import oft.utilities.plotting.psi_plotting as EasyPlot
+import oftpy.utilities.plotting.psi_plotting as EasyPlot
 
 ###### ------ PARAMETERS TO UPDATE -------- ########
 

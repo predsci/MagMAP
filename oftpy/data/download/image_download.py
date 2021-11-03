@@ -7,9 +7,9 @@ import os
 
 import astropy.units as u
 
-from oft.data.download import drms_helpers, vso_helpers
-from oft.data.download.euv_utils import cluster_meth_1, list_available_images
-from oft.database.db_funs import add_image2session
+from oftpy.data.download import drms_helpers, vso_helpers
+from oftpy.data.download.euv_utils import cluster_meth_1, list_available_images
+from oftpy.database.db_funs import add_image2session
 
 
 def synchronic_euv_download(synch_times, raw_data_dir, db_session, download=True, overwrite=False, verbose=True):

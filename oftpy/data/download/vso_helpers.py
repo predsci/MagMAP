@@ -12,7 +12,7 @@ import numpy as np
 import os
 from http.client import HTTPException
 
-from oft.utilities.file_io import io_helpers
+from oftpy.utilities.file_io import io_helpers
 
 
 class EUVI:

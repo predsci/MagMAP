@@ -23,7 +23,7 @@ import pandas as pd
 from http.client import HTTPException
 from collections import OrderedDict
 
-from oft.utilities.file_io import io_helpers
+from oftpy.utilities.file_io import io_helpers
 
 # ----------------------------------------------------------------------
 # global definitions
@@ -56,6 +56,7 @@ class HMI_M720s:
         # define the series specific default variables here
         # ---------------------------------------------
         # default keys for a normal query over a range of times
+        # self.default_keys = ['**ALL**', ]
         self.default_keys = ['T_REC', 'T_OBS', 'EXPTIME', 'CAMERA', 'QUALITY']
 
         # default filters to use for a query
@@ -66,19 +67,23 @@ class HMI_M720s:
         self.default_segments = ['magnetogram']
 
         # header items that change from "as-is" to "fits" formats served by JSOC.
-        self.hdr_keys_to_delete = None
-        self.hdr_keys_to_add = ['T-OBS', 'CAMERA', 'T-OBS-JD', 'SPC-CRFT',
-                                'INST']
+        self.hdr_keys_to_delete = ['SOURCE', ]
+        # self.hdr_keys_to_add = ['T-OBS', 'CAMERA', 'T-OBS-JD', 'SPC-CRFT',
+        #                         'INST']
+        self.hdr_keys_to_add = ['ALL', ]
 
         if verbose:
             print('### Initialized DRMS client for ' + self.series)
 
-    def update_hmi_fits_header(self, infile, outfile, drms_frame, verbose=False, force=False):
+    def update_hmi_fits_header(self, infile, drms_query, verbose=False, force=False):
         """
-        read an HMI fits file, update the header, write out a new file
+        read an HMI fits file, update the header, save the file
         The silentfix is to avoid warnings/and or crashes when astropy encounters nans in the header values
         """
-        hdu_in = astropy.io.fits.open(infile)
+
+        # open file for update
+        hdu_in = astropy.io.fits.open(infile, mode='update')
+        # The silentfix is to avoid warnings/and or crashes when astropy encounters nans in the header values
         hdu_in.verify('silentfix')
         hdr = hdu_in[1].header
 
@@ -89,32 +94,44 @@ class HMI_M720s:
             return
 
         # get the corresponding header info from the JSOC as a drms frame
-        # this is now an input to the function
-        # drms_frame = self.get_drms_info_for_image(hdr)
+        drms_frame = self.get_drms_info_for_image(drms_query)
 
         # update the header info
-        self.update_header_fields_from_drms(hdr, drms_frame, verbose=verbose)
+        hdr_update = self.update_header_fields_from_drms(hdr, drms_frame,
+                                                         verbose=verbose)
 
-        # write out the file
-        hdu_out = astropy.io.fits.CompImageHDU(hdu_in[1].data, hdr)
+        # update header and close
+        hdu_in[1].header = hdr_update
         hdu_in.close()
-        hdu_out.writeto(outfile, output_verify='silentfix', overwrite=True, checksum=True)
 
-    # removed - HMI fits headers do not contain enough information to self-query.
-    # def get_drms_info_for_image(self, hdr):
-    #     """
-    #     supply a fits header, obtain the full JSOC info as a pandas frame from drms
-    #     The prime key syntax for hmi.m_720s is used here
-    #     """
-    #     query_string = '%s[%s][%s]{%s}'%(self.series, hdr['T_OBS'], hdr['CAMERA'], 'image')
-    #     drms_frame = self.client.query(query_string, key=self.allkeys)
-    #     return drms_frame
+
+    def get_drms_info_for_image(self, init_query):
+        """
+        supply a single row from the result of query_time_interval(),
+        obtain the full JSOC info as a pandas frame from drms
+        The prime key syntax for hmi.m_720s is used here
+        """
+        query_string = '%s[%s_TAI][%s]'%(self.series, init_query.time.iloc[0], init_query.camera.iloc[0])
+        drms_frame = self.client.query(query_string, key="**ALL**")
+        # remove unwanted fields
+        all_cols = set(drms_frame.keys())
+        keep_cols = all_cols.difference(set(self.hdr_keys_to_delete))
+        drms_frame = drms_frame.loc[:, keep_cols]
+
+        return drms_frame
 
     def update_header_fields_from_drms(self, hdr, drms_frame, verbose=False):
         """
         update the fits header using info from a drms pandas frame
         This works for converting "as-is" hmi.m_720s headers to the "fits" style
         """
+
+        # Replace all NaNs with a flag value
+        if "BLANK" in drms_frame.keys():
+            blank_val = drms_frame.BLANK[0]
+        else:
+            blank_val = -2147483648
+        drms_frame.fillna(blank_val, inplace=True)
 
         # Delete the unwanted "as-is" protocol keys
         if self.hdr_keys_to_delete is not None:
@@ -124,11 +141,10 @@ class HMI_M720s:
 
         # setup the conversion of some drms pandas tags to "fits" tags
         hdr_pandas_keys_to_fits = {
-            'time': 'T-OBS',
-            'camera': 'CAMERA',
-            'jd': 'T-OBS-JD',
-            'spacecraft': 'SPC-CRFT',
-            'instrument': 'INST'}
+            'DATE__OBS': 'DATE_OBS',
+            'T_REC_epoch': 'TRECEPOC',
+            'T_REC_step': 'TRECSTEP',
+            'T_REC_unit': 'TRECUNIT'}
 
         # Add a history line about the conversion
         my_history = 'Updated the JSOC "as-is" ' + self.series + ' header information to "fits" using DRMS query info.'
@@ -149,7 +165,11 @@ class HMI_M720s:
                 pandas_val = drms_frame[pandas_key][0]
                 if type(fits_val) is int:
                     if math.isnan(pandas_val):
-                        pandas_val = -2147483648
+                        pandas_val = blank_val
+                elif pandas_key == "HISTORY":
+                    hdr.add_history(pandas_val)
+                elif pandas_key == "COMMENT":
+                    hdr.add_comment(pandas_val)
                 else:
                     pandas_val = drms_frame[pandas_key].astype(type(fits_val))[0]
 
@@ -159,13 +179,24 @@ class HMI_M720s:
                     hdr[fits_key] = pandas_val
 
             # Check for adding a key that doesn't exist.
-            elif fits_key in self.hdr_keys_to_add:
+            elif fits_key in self.hdr_keys_to_add or (len(self.hdr_keys_to_add) == 1
+                                                      and self.hdr_keys_to_add[0] == "ALL"):
                 hdr[fits_key] = drms_frame[pandas_key][0]
 
             # Check if the key is missing from the file and wasn't supposed to be added.
             else:
                 if verbose:
                     print('MISSING:   ', pandas_key, drms_frame[pandas_key][0])
+
+        # Last, check for 'DATE-OBS' field and convert to MJD
+        if "DATE_OBS" in hdr.keys():
+            date_str = hdr["DATE-OBS"]
+            date_str = date_str.replace("Z", "")
+            dtime = astropy.time.Time(date_str, format='fits')
+            mjd = dtime.mjd
+            hdr['MJD-OBS'] = mjd
+
+        return hdr
 
     def query_time_interval(self, time_range, search_cadence=None,
                             filters=None, segments=None, keys=None):
@@ -265,15 +296,15 @@ class HMI_M720s:
         url = data_series['url']
 
         # build the filename and subdir from the series, timestamp, and wavelength information
-        datetime = astropy.time.Time(data_series['time'], scale='tai').datetime
-        datetime = astropy.time.Time.strptime(
+        # image_datetime = astropy.time.Time(data_series['time'], scale='tai').datetime
+        image_datetime = astropy.time.Time.strptime(
             data_series['time'], format_string="%Y.%m.%d_%H:%M:%S", scale='tai'
         ).datetime
         prefix = '_'.join(self.series.split('.'))
         # postfix = str(data_series['filter'])
         postfix = ''
         ext = 'fits'
-        dir, fname = io_helpers.construct_path_and_fname(base_dir, datetime, prefix, postfix, ext)
+        dir, fname = io_helpers.construct_path_and_fname(base_dir, image_datetime, prefix, postfix, ext)
         fpath = dir + os.sep + fname
 
         # download the file
@@ -291,8 +322,8 @@ class HMI_M720s:
         if update:
             if verbose:
                 print('  Updating header info if necessary.')
-            drms_frame = data_series.to_frame().T
-            self.update_hmi_fits_header(fpath, fpath, drms_frame, verbose=False)
+            drms_query = data_series.to_frame().T
+            self.update_hmi_fits_header(fpath, drms_query, verbose=False)
 
         # now separate the the sub directory from the base path (i want relative path for the DB)
         sub_dir = os.path.sep.join(dir.split(base_dir)[1].split(os.path.sep)[1:])

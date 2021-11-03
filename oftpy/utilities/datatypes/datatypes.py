@@ -6,18 +6,224 @@ import os
 import pickle
 import sys
 
-import oft.utilities.file_io.psi_hdf as psihdf
-import oft.database.db_classes as db
-import oft.database.db_funs as db_fun
+import oftpy.utilities.file_io.psi_hdf as psihdf
+import oftpy.database.db_classes as db
+import oftpy.database.db_funs as db_fun
+from oftpy.data import prep
 import numpy as np
 import pandas as pd
 import sunpy.map
 import sunpy.util.metadata
-from oft.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR, interp_los_image_to_map2
-from oft.settings.info import DTypes
+from oftpy.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR
+from oftpy.settings.info import DTypes
 
 
 class LosImage:
+    """
+    Base class to hold the standard information for a Line-of-sight (LOS) image.
+
+    - Here the image is minimally described by:
+      data: a 2D numpy array of values.
+      x: a 1D array of the solar x positions of each pixel [Rs].
+      y: a 1D array of the solar y positions of each pixel [Rs].
+
+    - sunpy_meta: a dictionary of sunpy metadata (optional)
+      if this is specified then it to create a sunpy Map tag: map
+      - This preserves compatibility with Sunpy and is useful for
+        visualizing or interacting with the data.
+    """
+
+    def __init__(self, data=None, x=None, y=None, sunpy_meta=None, sunpy_cmap=None):
+
+        if data is not None:
+            # create the data tags
+            self.data = data.astype(DTypes.LOS_DATA)
+            self.x = x.astype(DTypes.LOS_AXES)
+            self.y = y.astype(DTypes.LOS_AXES)
+
+        # if sunpy_meta is supplied try to create a sunpy map
+        if sunpy_meta != None:
+            self.add_map(sunpy_meta)
+        # independent of whether or not we create a sunpy map, we may want the
+        # standard colormap
+        if sunpy_cmap != None:
+            self.sunpy_cmap = sunpy_cmap
+
+        # add placeholders for carrington coords and mu
+        self.lat = None
+        self.lon = None
+        self.mu = None
+        self.no_data_val = None
+
+    def get_coordinates(self, R0=1.0, outside_map_val=-9999.):
+        """
+        Calculate relevant mapping information for each pixel.
+        This adds 2D arrays to the class:
+        - lat: carrington latitude
+        - lon: carrington longitude
+        - mu: cosine of the center to limb angle
+        """
+
+        x_mat, y_mat = np.meshgrid(self.x, self.y)
+        x_vec = x_mat.flatten(order="C")
+        y_vec = y_mat.flatten(order="C")
+
+        cr_theta_all, cr_phi_all, image_mu = image_grid_to_CR(x_vec, y_vec, R0=R0, obsv_lat=self.info['cr_lat'],
+                                                              obsv_lon=self.info['cr_lon'], get_mu=True,
+                                                              outside_map_val=outside_map_val)
+
+        cr_theta = cr_theta_all.reshape(self.data.shape, order="C")
+        cr_phi = cr_phi_all.reshape(self.data.shape, order="C")
+        image_mu = image_mu.reshape(self.data.shape, order="C")
+
+        self.lat = cr_theta - np.pi / 2.
+        self.lon = cr_phi
+        self.mu = image_mu
+        self.no_data_val = outside_map_val
+
+    def add_map(self, sunpy_meta):
+        """
+        Add a sunpy map to the class.
+        - here the metadata is supplied, and whatever is in self.data is used.
+        """
+        if hasattr(self, 'map'):
+            delattr(self, 'map')
+        self.map = sunpy.map.Map(self.data, sunpy_meta)
+
+
+    def interp_to_map(self, R0=1.0, map_x=None, map_y=None, no_data_val=-9999., image_num=None):
+
+        if type(self) == CHDImage:
+            print("Converting " + self.info['instrument'] + "-" + str(self.info['wavelength']) + " image from " +
+                  self.info['date_string'] + " to a CHD map.")
+        else:
+            print("Converting " + self.info['instrument'] + "-" + str(self.info['wavelength']) + " image from " +
+              self.info['date_string'] + " to a EUV map.")
+
+        if map_x is None and map_y is None:
+            # Generate map grid based on number of image pixels vertically within R0
+            # map parameters (assumed)
+            y_range = [-1, 1]
+            x_range = [0, 2 * np.pi]
+
+            # observer parameters (from image)
+            cr_lat = self.info['cr_lat']
+            cr_lon = self.info['cr_lon']
+
+            # determine number of pixels in map y-grid
+            map_nycoord = sum(abs(self.y) < R0)
+            del_y = (y_range[1] - y_range[0]) / (map_nycoord - 1)
+            # how to define pixels? square in sin-lat v phi or lat v phi?
+            # del_x = del_y*np.pi/2
+            del_x = del_y
+            map_nxcoord = (np.floor((x_range[1] - x_range[0]) / del_x) + 1).astype(int)
+
+            # generate map x,y grids. y grid centered on equator, x referenced from lon=0
+            map_y = np.linspace(y_range[0], y_range[1], map_nycoord, dtype=DTypes.MAP_AXES)
+            map_x = np.linspace(x_range[0], x_range[1], map_nxcoord, dtype=DTypes.MAP_AXES)
+
+        # Do interpolation
+        interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val)
+
+        origin_image = np.full(interp_result.data.shape, 0, dtype=DTypes.MAP_ORIGIN_IMAGE)
+        # if image number is entered, record in appropriate pixels
+        if image_num is not None:
+            origin_image[interp_result.data > no_data_val] = image_num
+
+        # Partially populate a map object with grid and data info
+        map_out = PsiMap(interp_result.data, interp_result.x, interp_result.y,
+                         mu=interp_result.mu_mat, map_lon=interp_result.map_lon,
+                         origin_image=origin_image, no_data_val=no_data_val)
+
+        # construct map_info df to record basic map info
+        map_info_df = pd.DataFrame(data=[[1, datetime.datetime.now()], ],
+                                   columns=["n_images", "time_of_compute"])
+        map_out.append_map_info(map_info_df)
+
+        return map_out
+
+
+class LosMagneto(LosImage):
+    """
+    Class to hold the standard information for a Line-of-sight (LOS) magnetogram.
+    Created specifically to handle HMI 720s data, this class should work for
+    any magnetogram on a disk.
+
+    - Here the image is minimally described by:
+      data: a 2D numpy array of values.
+      x: a 1D array of the solar x positions of each pixel [Rs].
+      y: a 1D array of the solar y positions of each pixel [Rs].
+      chd_meta: a dictionary of the metadata used by the CHD database
+
+    - sunpy_meta: a dictionary of sunpy metadata (optional)
+      if this is specified then it to create a sunpy Map tag: map
+      - This preserves compatibility with Sunpy and is useful for
+        visualizing or interacting with the data.
+    """
+
+    def __init__(self, data=None, x=None, y=None, sunpy_cmap=None, sunpy_meta=None,
+                 make_map=False):
+
+        pass_sunpy_meta = False
+        if sunpy_meta is not None:
+            # record the meta_data
+            self.sunpy_meta = sunpy_meta
+            if make_map:
+                pass_sunpy_meta = True
+
+        # reference the base class .__init__()
+        if pass_sunpy_meta:
+            super().__init__(data, x, y, sunpy_cmap=sunpy_cmap, sunpy_meta=sunpy_meta)
+        else:
+            super().__init__(data, x, y, sunpy_cmap=sunpy_cmap)
+
+        # any initial data attributes unique to LosMagneto are setup here
+
+
+
+def read_hmi720s(fits_file, make_map=False):
+    """
+    Method for reading an HMI 720s FITS file to a LosMagneto class.
+    fits_file: path to a raw fits file.
+    make_map: boolean. Imbeds a sunpy.map object in the LosMagneto object. This allows
+              many features, but is also redundant.
+    output: an LosMagneto object.
+
+    """
+    # load data and header tuple into sunpy map type
+    map_raw = sunpy.map.Map(fits_file)
+    # get orig map scales
+    x_raw, y_raw = prep.get_scales_from_map(map_raw)
+    # find all NaNs
+    nan_index = np.isnan(map_raw.data)
+    # generate xy-grids
+    x_raw_grid, y_raw_grid = np.meshgrid(x_raw, y_raw)
+    # record radius of measurements for post-rotation
+    radius2_grid = x_raw_grid**2 + y_raw_grid**2
+    radius_thresh = np.sqrt(np.min(radius2_grid[nan_index]))
+
+    # rotate image to solar north up. fill missing values with NaN to preserve
+    # standard HMI formatting
+    # first convert NaNs to 0. for rotation algorithm
+    map_raw.data[nan_index] = 0.
+    rot_map = prep.rotate_map_nopad(map_raw)
+    # get x and y axis
+    x, y = prep.get_scales_from_map(rot_map)
+
+    x_grid, y_grid = np.meshgrid(x, y)
+    radius2_grid = x_grid**2 + y_grid**2
+    new_nan_index = radius2_grid >= radius_thresh**2
+    rot_map.data[new_nan_index] = np.nan
+
+    # create the object
+    los = LosMagneto(rot_map.data, x, y, sunpy_cmap=rot_map.cmap,
+                     sunpy_meta=rot_map.meta, make_map=make_map)
+
+    return los
+
+
+class EUVImage(LosImage):
+
     """
     Class to hold the standard information for a Line-of-sight (LOS) image
     for the CHD package.
@@ -36,24 +242,12 @@ class LosImage:
 
     def __init__(self, data=None, x=None, y=None, chd_meta=None, sunpy_meta=None):
 
-        if data is not None:
-            # create the data tags
-            self.data = data.astype(DTypes.LOS_DATA)
-            self.x = x.astype(DTypes.LOS_AXES)
-            self.y = y.astype(DTypes.LOS_AXES)
+        # reference the base class .__init__()
+        super().__init__(data, x, y, sunpy_meta)
 
-            # add the info dictionary
-            self.info = chd_meta
+        # add the info dictionary
+        self.info = chd_meta
 
-        # if sunpy_meta is supplied try to create a sunpy map
-        if sunpy_meta != None:
-            self.add_map(sunpy_meta)
-
-        # add placeholders for carrington coords and mu
-        self.lat = None
-        self.lon = None
-        self.mu = None
-        self.no_data_val = None
 
     def get_coordinates(self, R0=1.0, outside_map_val=-9999.):
         """
@@ -152,52 +346,6 @@ class LosImage:
 
         return map_out
 
-    def interp_to_map2(self, R0=1.0, map_x=None, map_y=None, no_data_val=-9999., image_num=None):
-
-        print("Converting " + self.info['instrument'] + "-" + str(self.info['wavelength']) + " image from " +
-              self.info['date_string'] + " to a map.\n")
-
-        if map_x is None and map_y is None:
-            # Generate map grid based on number of image pixels vertically within R0
-            # map parameters (assumed)
-            y_range = [-1, 1]
-            x_range = [0, 2 * np.pi]
-
-            # observer parameters (from image)
-            cr_lat = self.info['cr_lat']
-            cr_lon = self.info['cr_lon']
-
-            # determine number of pixels in map y-grid
-            map_nycoord = sum(abs(self.y) < R0)
-            del_y = (y_range[1] - y_range[0]) / (map_nycoord - 1)
-            # how to define pixels? square in sin-lat v phi or lat v phi?
-            # del_x = del_y*np.pi/2
-            del_x = del_y
-            map_nxcoord = (np.floor((x_range[1] - x_range[0]) / del_x) + 1).astype(int)
-
-            # generate map x,y grids. y grid centered on equator, x referenced from lon=0
-            map_y = np.linspace(y_range[0], y_range[1], map_nycoord, dtype=DTypes.MAP_AXES)
-            map_x = np.linspace(x_range[0], x_range[1], map_nxcoord, dtype=DTypes.MAP_AXES)
-
-        # Do interpolation
-        interp_result = interp_los_image_to_map2(self, R0, map_x, map_y, no_data_val=no_data_val)
-
-        origin_image = np.full(interp_result.data.shape, 0, dtype=DTypes.MAP_ORIGIN_IMAGE)
-        # if image number is entered, record in appropriate pixels
-        if image_num is not None:
-            origin_image[interp_result.data > no_data_val] = image_num
-
-        # Partially populate a map object with grid and data info
-        map_out = PsiMap(interp_result.data, interp_result.x, interp_result.y,
-                         mu=interp_result.mu_mat, origin_image=origin_image, no_data_val=no_data_val)
-
-        # construct map_info df to record basic map info
-        map_info_df = pd.DataFrame(data=[[1, datetime.datetime.now()], ],
-                                   columns=["n_images", "time_of_compute"])
-        map_out.append_map_info(map_info_df)
-
-        return map_out
-
     def mu_hist(self, intensity_bin_edges, mu_bin_edges, lat_band=[-np.pi / 64., np.pi / 64.], log10=True):
         """
         Given an LOS image, bin an equatorial band of mu-bins by intensity.  This will generally
@@ -254,7 +402,7 @@ class LosImage:
         return hist_out
 
 
-def read_los_image(h5_file):
+def read_euv_image(h5_file):
     """
     Method for reading our custom hdf5 format for prepped EUV images.
     input: path to a prepped .h5 file.
@@ -269,12 +417,12 @@ def read_los_image(h5_file):
     x, y, z, data, chd_meta, sunpy_meta = psihdf.rdh5_meta(h5_file)
 
     # create the structure
-    los = LosImage(data, x, y, chd_meta, sunpy_meta=sunpy_meta)
+    los = EUVImage(data, x, y, chd_meta, sunpy_meta=sunpy_meta)
 
     return los
 
 
-class LBCCImage(LosImage):
+class LBCCImage(EUVImage):
     """
     Class that holds limb-brightening corrected data
     """
