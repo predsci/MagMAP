@@ -11,8 +11,6 @@ import time
 import oftpy.utilities.datatypes.datatypes as psi_d_types
 from oftpy.settings.info import DTypes
 from oftpy.utilities.coord_manip import s2c
-import oftpy.data.corrections.lbcc.lbcc_utils as lbcc_funs
-
 
 
 class MapMesh:
@@ -732,7 +730,7 @@ def downsamp_reg_grid_orig(map, new_y, new_x, image_method=0, chd_method=0, peri
         # determine linear row-weighting of original pixels to new pixels
         new_hist = np.ones(1)
         temp_edges = new_y_edges[new_y_index:(new_y_index+2)]
-        old_hist = lbcc_funs.hist_integration(new_hist, temp_edges, old_y_edges)
+        old_hist = hist_integration(new_hist, temp_edges, old_y_edges)
         bin_indices = np.where(old_hist > 0.)
         bin_weights = old_hist[bin_indices]
         # also weight by pixel area on surface of sphere
@@ -757,10 +755,10 @@ def downsamp_reg_grid_orig(map, new_y, new_x, image_method=0, chd_method=0, peri
         # determine linear row-weighting of original pixels to new pixels
         # new_hist = np.zeros(new_x_n)
         # new_hist[new_x_index] = 1
-        # old_hist = lbcc_funs.hist_integration(new_hist, new_x_edges, old_x_edges)
+        # old_hist = hist_integration(new_hist, new_x_edges, old_x_edges)
         new_hist = np.ones(1)
         temp_edges = new_x_edges[new_x_index:(new_x_index + 2)]
-        old_hist = lbcc_funs.hist_integration(new_hist, temp_edges, old_x_edges)
+        old_hist = hist_integration(new_hist, temp_edges, old_x_edges)
         bin_indices = np.where(old_hist > 0.)
         bin_weights = old_hist[bin_indices]
         # normalize
@@ -924,7 +922,7 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
         # determine linear row-weighting of original pixels to new pixels
         # new_hist = np.ones(1)
         temp_edges = new_y_edges[new_y_index:(new_y_index+2)]
-        # old_hist = lbcc_funs.hist_integration(new_hist, temp_edges, old_y_edges)
+        # old_hist = hist_integration(new_hist, temp_edges, old_y_edges)
         pixel_portions = pixel_portion_overlap1D(temp_edges, old_y_edges)
         bin_indices = np.where(pixel_portions > 0.)
         bin_weights = pixel_portions[bin_indices]
@@ -948,7 +946,7 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
         # determine linear row-weighting of original pixels to new pixels
         # new_hist = np.ones(1)
         temp_edges = new_x_edges[new_x_index:(new_x_index + 2)]
-        # old_hist = lbcc_funs.hist_integration(new_hist, temp_edges, old_x_edges)
+        # old_hist = hist_integration(new_hist, temp_edges, old_x_edges)
         pixel_portions = pixel_portion_overlap1D(temp_edges, old_x_edges)
         bin_indices = np.where(pixel_portions > 0.)
         bin_weights = pixel_portions[bin_indices]
@@ -1317,3 +1315,43 @@ def br_abs_flux_indices(br_map, y_index, x_index, map_da, chd_magnitude=None):
                           chd_magnitude)
 
     return chd_flux
+
+
+def hist_integration(hist, old_bins, new_bins):
+    """
+    Given a histogram 'hist' with bin edges defined as 'old_bins', integrate into 'new_bins'
+    and return the resulting new_hist
+    :param hist: list with original histogram values (normalized)
+    :param old_bins: list of original bin edges (ascending)
+    :param new_bins: list of new bin edges (ascending)
+    :return: list of histogram values for linearly transformed hist integrated over
+    old_bins. Note: the returned list will not sum to 1 if the linearly transformed bins
+    exceed the limits of the old_bins.  Re-normalization was removed to improve how this
+    function interacts with the optimization process.
+    """
+    old_max = old_bins[-1]
+    old_min = old_bins[0]
+    new_hist = np.full((len(new_bins) - 1,), 0., dtype='float')
+    for ii in range(len(new_bins) - 1):
+        l_edge = new_bins[ii]
+        r_edge = new_bins[ii + 1]
+        if l_edge >= old_max or r_edge < old_min:
+            # This bin falls outside the transformed range. Assign it a 0
+            # do nothing, the value was initialized to 0
+            continue
+        else:
+            overlap_index = np.where(np.logical_and(old_bins[:-1] < r_edge, old_bins[1:] >= l_edge))
+            # loop through each new bin that overlaps the evaluation bin
+            for bin_num in overlap_index[0]:
+                # determine what portion of the new bin intersects the evaluation bin
+                l_overlap = max(l_edge, old_bins[bin_num])
+                r_overlap = min(r_edge, old_bins[bin_num + 1])
+                portion = (r_overlap - l_overlap) / (old_bins[bin_num + 1] - old_bins[bin_num])
+                # add the appropriate portion to the evaluation bin
+                new_hist[ii] = new_hist[ii] + portion * hist[bin_num]
+
+    # re-normalize the new histogram (should only be necessary when 'bins' range does not
+    # fully encompass the non-zero values of hist)
+    # new_hist = new_hist/new_hist.sum()
+
+    return new_hist

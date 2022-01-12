@@ -55,7 +55,7 @@ class LosImage:
         self.mu = None
         self.no_data_val = None
 
-    def get_coordinates(self, R0=1.0, outside_map_val=-9999.):
+    def get_coordinates(self, R0=1.0, cr_lat=0., cr_lon=0., outside_map_val=-9999.):
         """
         Calculate relevant mapping information for each pixel.
         This adds 2D arrays to the class:
@@ -68,15 +68,17 @@ class LosImage:
         x_vec = x_mat.flatten(order="C")
         y_vec = y_mat.flatten(order="C")
 
-        cr_theta_all, cr_phi_all, image_mu = image_grid_to_CR(x_vec, y_vec, R0=R0, obsv_lat=self.info['cr_lat'],
-                                                              obsv_lon=self.info['cr_lon'], get_mu=True,
+        cr_theta_all, cr_phi_all, image_mu = image_grid_to_CR(x_vec, y_vec, R0=R0, obsv_lat=cr_lat,
+                                                              obsv_lon=cr_lon, get_mu=True,
                                                               outside_map_val=outside_map_val)
 
         cr_theta = cr_theta_all.reshape(self.data.shape, order="C")
         cr_phi = cr_phi_all.reshape(self.data.shape, order="C")
         image_mu = image_mu.reshape(self.data.shape, order="C")
 
-        self.lat = cr_theta - np.pi / 2.
+        data_index = cr_theta != outside_map_val
+        self.lat = cr_theta
+        self.lat[data_index] = self.lat[data_index] - np.pi/2.
         self.lon = cr_phi
         self.mu = image_mu
         self.no_data_val = outside_map_val
@@ -90,57 +92,12 @@ class LosImage:
             delattr(self, 'map')
         self.map = sunpy.map.Map(self.data, sunpy_meta)
 
-
-    def interp_to_map(self, R0=1.0, map_x=None, map_y=None, no_data_val=-9999., image_num=None):
-
-        if type(self) == CHDImage:
-            print("Converting " + self.info['instrument'] + "-" + str(self.info['wavelength']) + " image from " +
-                  self.info['date_string'] + " to a CHD map.")
-        else:
-            print("Converting " + self.info['instrument'] + "-" + str(self.info['wavelength']) + " image from " +
-              self.info['date_string'] + " to a EUV map.")
-
-        if map_x is None and map_y is None:
-            # Generate map grid based on number of image pixels vertically within R0
-            # map parameters (assumed)
-            y_range = [-1, 1]
-            x_range = [0, 2 * np.pi]
-
-            # observer parameters (from image)
-            cr_lat = self.info['cr_lat']
-            cr_lon = self.info['cr_lon']
-
-            # determine number of pixels in map y-grid
-            map_nycoord = sum(abs(self.y) < R0)
-            del_y = (y_range[1] - y_range[0]) / (map_nycoord - 1)
-            # how to define pixels? square in sin-lat v phi or lat v phi?
-            # del_x = del_y*np.pi/2
-            del_x = del_y
-            map_nxcoord = (np.floor((x_range[1] - x_range[0]) / del_x) + 1).astype(int)
-
-            # generate map x,y grids. y grid centered on equator, x referenced from lon=0
-            map_y = np.linspace(y_range[0], y_range[1], map_nycoord, dtype=DTypes.MAP_AXES)
-            map_x = np.linspace(x_range[0], x_range[1], map_nxcoord, dtype=DTypes.MAP_AXES)
+    def interp_data(self, R0, map_x, map_y, no_data_val=-9999.):
 
         # Do interpolation
         interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val)
 
-        origin_image = np.full(interp_result.data.shape, 0, dtype=DTypes.MAP_ORIGIN_IMAGE)
-        # if image number is entered, record in appropriate pixels
-        if image_num is not None:
-            origin_image[interp_result.data > no_data_val] = image_num
-
-        # Partially populate a map object with grid and data info
-        map_out = PsiMap(interp_result.data, interp_result.x, interp_result.y,
-                         mu=interp_result.mu_mat, map_lon=interp_result.map_lon,
-                         origin_image=origin_image, no_data_val=no_data_val)
-
-        # construct map_info df to record basic map info
-        map_info_df = pd.DataFrame(data=[[1, datetime.datetime.now()], ],
-                                   columns=["n_images", "time_of_compute"])
-        map_out.append_map_info(map_info_df)
-
-        return map_out
+        return interp_result
 
 
 class LosMagneto(LosImage):
@@ -168,6 +125,9 @@ class LosMagneto(LosImage):
         if sunpy_meta is not None:
             # record the meta_data
             self.sunpy_meta = sunpy_meta
+            # for back-compatibility, we add an 'info' attribute
+            self.info = dict(cr_lat=self.sunpy_meta['crlt_obs'],
+                             cr_lon=self.sunpy_meta['crln_obs'])
             if make_map:
                 pass_sunpy_meta = True
 
@@ -180,10 +140,58 @@ class LosMagneto(LosImage):
         # any initial data attributes unique to LosMagneto are setup here
 
 
+    def get_coordinates(self, R0=1.0, outside_map_val=-65500.):
+
+        cr_lat = self.sunpy_meta['crlt_obs']
+        cr_lon = self.sunpy_meta['crln_obs']
+
+        super().get_coordinates(R0=R0, cr_lat=cr_lat, cr_lon=cr_lon,
+                                outside_map_val=outside_map_val)
+
+    def interp_to_map(self, R0=1.0, map_x=None, map_y=None, no_data_val=-65500., image_num=None):
+
+        print("Converting " + self.sunpy_meta['telescop'] + "-" + str(self.sunpy_meta['content']) + " image from " +
+              self.sunpy_meta['date_obs'] + " to a CR map.")
+
+        if map_x is None and map_y is None:
+            # Generate map grid based on number of image pixels horizontally within R0
+            # map parameters (assumed)
+            y_range = [-1, 1]
+            x_range = [0, 2 * np.pi]
+
+            # determine number of pixels in map x and y-grids
+            map_nxcoord = 2*sum(abs(self.x) < R0)
+            map_nycoord = map_nxcoord/2
+
+            # generate map x,y grids. y grid centered on equator, x referenced from lon=0
+            map_y = np.linspace(y_range[0], y_range[1], map_nycoord, dtype=DTypes.MAP_AXES)
+            map_x = np.linspace(x_range[0], x_range[1], map_nxcoord, dtype=DTypes.MAP_AXES)
+
+        # Do interpolation
+        interp_result = self.interp_data(R0, map_x, map_y, no_data_val=no_data_val)
+
+        origin_image = np.full(interp_result.data.shape, 0, dtype=DTypes.MAP_ORIGIN_IMAGE)
+        # if image number is entered, record in appropriate pixels
+        if image_num is not None:
+            origin_image[interp_result.data > no_data_val] = image_num
+
+        # Partially populate a map object with grid and data info
+        map_out = PsiMap(interp_result.data, interp_result.x, interp_result.y,
+                         mu=interp_result.mu_mat, map_lon=interp_result.map_lon,
+                         origin_image=origin_image, no_data_val=no_data_val)
+
+        # construct map_info df to record basic map info
+        map_info_df = pd.DataFrame(data=[[1, datetime.datetime.now()], ],
+                                   columns=["n_images", "time_of_compute"])
+        map_out.append_map_info(map_info_df)
+
+        return map_out
+
 
 def read_hmi720s(fits_file, make_map=False):
     """
-    Method for reading an HMI 720s FITS file to a LosMagneto class.
+    Method for reading an HMI 720s FITS file to a LosMagneto class.  This
+    includes a rotation to solar-north-up.
     fits_file: path to a raw fits file.
     make_map: boolean. Imbeds a sunpy.map object in the LosMagneto object. This allows
               many features, but is also redundant.
@@ -248,41 +256,13 @@ class EUVImage(LosImage):
         # add the info dictionary
         self.info = chd_meta
 
+    def get_coordinates(self, R0=1.01, outside_map_val=-9999.):
 
-    def get_coordinates(self, R0=1.0, outside_map_val=-9999.):
-        """
-        Calculate relevant mapping information for each pixel.
-        This adds 2D arrays to the class:
-        - lat: carrington latitude
-        - lon: carrington longitude
-        - mu: cosine of the center to limb angle
-        """
+        cr_lat = self.info['cr_lat']
+        cr_lon = self.info['cr_lon']
 
-        x_mat, y_mat = np.meshgrid(self.x, self.y)
-        x_vec = x_mat.flatten(order="C")
-        y_vec = y_mat.flatten(order="C")
-
-        cr_theta_all, cr_phi_all, image_mu = image_grid_to_CR(x_vec, y_vec, R0=R0, obsv_lat=self.info['cr_lat'],
-                                                              obsv_lon=self.info['cr_lon'], get_mu=True,
-                                                              outside_map_val=outside_map_val)
-
-        cr_theta = cr_theta_all.reshape(self.data.shape, order="C")
-        cr_phi = cr_phi_all.reshape(self.data.shape, order="C")
-        image_mu = image_mu.reshape(self.data.shape, order="C")
-
-        self.lat = cr_theta - np.pi / 2.
-        self.lon = cr_phi
-        self.mu = image_mu
-        self.no_data_val = outside_map_val
-
-    def add_map(self, sunpy_meta):
-        """
-        Add a sunpy map to the class.
-        - here the metadata is supplied, and whatever is in self.data is used.
-        """
-        if hasattr(self, 'map'):
-            delattr(self, 'map')
-        self.map = sunpy.map.Map(self.data, sunpy_meta)
+        super().get_coordinates(R0=R0, cr_lat=cr_lat, cr_lon=cr_lon,
+                                outside_map_val=outside_map_val)
 
     def write_to_file(self, filename):
         """
@@ -327,7 +307,12 @@ class EUVImage(LosImage):
             map_x = np.linspace(x_range[0], x_range[1], map_nxcoord, dtype=DTypes.MAP_AXES)
 
         # Do interpolation
-        interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val)
+        interp_result = self.interp_data(R0, map_x, map_y, no_data_val=no_data_val)
+
+        # some images are cutoff or have no_data_val within the image disk for some reason.
+        # To mostly filter out these types of points, set any resulting negatives to no_data_val
+        data_index = interp_result.data > (no_data_val+1.)
+        interp_result.data[data_index][interp_result.data[data_index] < 0.] = no_data_val
 
         origin_image = np.full(interp_result.data.shape, 0, dtype=DTypes.MAP_ORIGIN_IMAGE)
         # if image number is entered, record in appropriate pixels

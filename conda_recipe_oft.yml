@@ -13,7 +13,7 @@ dependencies:
   - python
   - scipy
   - sqlalchemy-utils
-  - sunpy >= 3.0
+  - sunpy
   - opencv
   - notebook
   - mkdocs-material
