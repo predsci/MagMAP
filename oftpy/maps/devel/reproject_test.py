@@ -135,8 +135,7 @@ for map_nycoord in y_resolutions:
 
     # --- reproject_interp
     interp_start_time = time.time()
-    # the function to open the file includes the original rotation, so
-    # it is included in the timing
+    # include file-load in the timing for direct comparison
     raw_image = sunpy.map.Map(fpath)
     input_data = (raw_image.data, raw_image.wcs)
 

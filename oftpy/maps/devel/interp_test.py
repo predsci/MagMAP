@@ -3,22 +3,31 @@ import numpy as np
 import time
 import pandas as pd
 import sunpy
+import os
 
 from oftpy.utilities.datatypes import datatypes
 from oftpy.maps.util import map_manip
 
 # designate file name and location for output table
-# out_path = "/Users/turtle/GitReps/OFT/oftpy/maps/devel/oftpy-interp_timings.csv"
-out_path = "/Users/turtle/Dropbox/MyOFT/interp_analysis/oftpy-interp_timings.csv"
+out_path = "/Users/turtle/Dropbox/MyOFT/interp_analysis/"
 # load HMI fits file to sunpy map
 fpath = "/Users/turtle/data/oft/raw_images/2014/04/13/hmi_m_720s_20140413T182401_.fits"
 
+solar_north_up = False
 R0 = 1.0
 out_table = pd.DataFrame(None, columns=["method", "y_pix", "map_pix", "time_s", "B_los",
                                         "B_los_abs", "B_r",	"B_r_abs", "im_min", "im_max",
                                         "im_mean", "map_min", "map_max", "map_mean"])
 
 raw_image = sunpy.map.Map(fpath)
+
+if solar_north_up:
+    method_title = "OFTpy_interp"
+    fname = "oftpy-interp_timings.csv"
+else:
+    method_title = "OFTpy_interp_snu-F"
+    fname = "oftpy-interp_timings_snu-F.csv"
+out_file = os.path.join(out_path, fname)
 
 # --- Use OFT interp at increasing resolutions -------------------
 stat_mu_thresh = 0.2
@@ -27,9 +36,11 @@ for map_nycoord in [125, 250, 500, 1000, 2000, 4000, 8000, 12000]:
     print("Starting calc for map_nycoord =", map_nycoord)
     interp_start_time = time.time()
 
-    # the function to open the file includes the original rotation, so
-    # it is included in the timing
-    hmi_image = datatypes.read_hmi720s(fpath)
+    # open the file (without rotating to solar_north_up
+    # include in timings for direct comparison
+    hmi_image = datatypes.read_hmi720s(fpath, solar_north_up=solar_north_up)
+    hmi_image.get_coordinates(R0=R0)
+    hmi_image.data[np.isnan(hmi_image.data)] = 0.
 
     map_nxcoord = 2*map_nycoord
 
@@ -41,8 +52,6 @@ for map_nycoord in [125, 250, 500, 1000, 2000, 4000, 8000, 12000]:
     # interp expects sin(lat)
     sin_lat = np.sin(y_axis)
 
-    hmi_image.get_coordinates(R0=R0)
-    hmi_image.data[np.isnan(hmi_image.data)] = 0.
     hmi_map = hmi_image.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat)
     interp_end_time = time.time()
     total_seconds = interp_end_time-interp_start_time
@@ -83,11 +92,11 @@ for map_nycoord in [125, 250, 500, 1000, 2000, 4000, 8000, 12000]:
 
     # add results to output table
     out_table = out_table.append(pd.DataFrame(
-        dict(method=["OFTpy_interp", ], y_pix=map_nycoord, map_pix=map_nycoord*map_nxcoord,
+        dict(method=[method_title, ], y_pix=map_nycoord, map_pix=map_nycoord*map_nxcoord,
              time_s=total_seconds, B_los=B_los, B_los_abs=B_los_abs,
              B_r=B_r_sum, B_r_abs=Br_abs_sum, im_min=im_min, im_max=im_max,
              im_mean=im_mean, map_min=map_min, map_max=map_max, map_mean=map_mean)
     ), ignore_index=True)
 
 # write table to csv
-out_table.to_csv(out_path, index=False)
+out_table.to_csv(out_file, index=False)

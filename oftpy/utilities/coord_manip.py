@@ -50,7 +50,7 @@ def get_arclength(chord_length, radius=1.0):
     return arclength
 
 
-def map_grid_to_image(map_x, map_y, R0=1.0, obsv_lon=0.0, obsv_lat=0.0):
+def map_grid_to_image(map_x, map_y, R0=1.0, obsv_lon=0.0, obsv_lat=0.0, image_crota2=0.0):
     """
     Given a set of xy coordinate pairs, in map-space (x:horizontal phi axis, y:vertical sin(theta) axis, radius:R0),
     rotate and change variables to image space (x:horizontal, y:vertical, z:coming out of image, theta=0 at center of
@@ -60,6 +60,8 @@ def map_grid_to_image(map_x, map_y, R0=1.0, obsv_lon=0.0, obsv_lat=0.0):
     :param R0: Image radius in solar radii
     :param obsv_lon: Carrington longitude of image observer
     :param obsv_lat: Carrington latitude of image observer
+    :param image_crota2: Degrees counterclockwise rotation needed to put solar-north-up in the image. This is generally
+    a parameter in the .fits metadata named 'crota2'.
     :return:
     """
 
@@ -72,25 +74,12 @@ def map_grid_to_image(map_x, map_y, R0=1.0, obsv_lon=0.0, obsv_lat=0.0):
     map3D_y = R0 * np.sin(map_theta) * np.sin(map_phi)
     map3D_z = R0 * np.cos(map_theta)
 
-    # rotate phi (about map z-axis. observer phi goes to -y)
-    # del_phi = -obsv_lon*np.pi/180 - np.pi/2
-    # int3D_x = np.cos(del_phi)*map3D_x - np.sin(del_phi)*map3D_y
-    # int3D_y = np.cos(del_phi)*map3D_y + np.sin(del_phi)*map3D_x
-    # int3D_z = map3D_z
-
-    # rotate theta (about x-axis. observer theta goes to +z)
-    # del_theta = obsv_lat*np.pi/180 - np.pi/2
-    # image_x = int3D_x
-    # image_y = np.cos(del_theta)*int3D_y - np.sin(del_theta)*int3D_z
-    # image_z = np.cos(del_theta)*int3D_z + np.sin(del_theta)*int3D_y
-    # rotate theta (about intermediate y-axis) exterior minus sign is due to right-hand-rule rotation direction.
-    # del_theta = -cr_lat*np.pi/180 + np.pi/2
-    # image_x = np.cos(del_theta)*int3D_x + np.sin(del_theta)*int3D_z
-    # image_y = int3D_y
-    # image_z = -np.sin(del_theta)*int3D_x + np.cos(del_theta)*int3D_z
-
-    # generate rotation matrix
-    rot_mat = map_to_image_rot_mat(obsv_lon, obsv_lat)
+    # generate rotation matrix (from Carrington to image solar-north-up)
+    rot_mat1 = map_to_image_rot_mat(obsv_lon, obsv_lat)
+    # generate rotation matrix (from image solar-north-up to image orientation)
+    rot_mat2 = snu_to_image_rot_mat(image_crota2)
+    # combine rotations
+    rot_mat = np.matmul(rot_mat2, rot_mat1)
     # construct coordinate array
     coord_array = np.array([map3D_x, map3D_y, map3D_z])
     # apply rotation matrix to coordinates
@@ -204,10 +193,19 @@ def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999.):
     map_x_vec = mat_x.flatten(order="C")
     map_y_vec = mat_y.flatten(order="C")
     interp_result_vec = interp_result.flatten(order="C")
+    # determine if image is solar-north-up, or needs an additional rotation
+    if hasattr(image_in, "sunpy_meta"):
+        if "crota2" in image_in.sunpy_meta.keys():
+            image_crota2 = image_in.sunpy_meta['crota2']
+        else:
+            image_crota2 = 0.
+    else:
+        image_crota2 = 0.
     # convert map grid variables to image space
     image_x, image_y, image_z, image_theta, image_phi = map_grid_to_image(map_x_vec, map_y_vec, R0=R0,
                                                                           obsv_lon=image_in.info['cr_lon'],
-                                                                          obsv_lat=image_in.info['cr_lat'])
+                                                                          obsv_lat=image_in.info['cr_lat'],
+                                                                          image_crota2=image_crota2)
     # only interpolate points on the front half of the sphere
     interp_index = image_z > 0
 
@@ -251,4 +249,19 @@ def map_to_image_rot_mat(obsv_lon, obsv_lat):
 
     return tot_rot
 
+def snu_to_image_rot_mat(crota2):
+    # Use the 'crota2' parameter (degrees counterclockwise) from fits metadata to rotate points
+    # from solar-north-up (snu) to image orientation.
+    # Assumes that we are in 3-D image-coordinates and rotating about
+    # the observer line-of-sight (image z-axis)
+    # Also assumes that the image-space horizontal axis is 'x' and increases to the right and
+    # that the image-space vertical axis is 'y' and increases up.  Positive z-axis is toward
+    # the observer.
+
+    # convert to radians
+    crota_rad = np.pi*crota2/180
+    rot_mat = np.array([[np.cos(crota_rad), -np.sin(crota_rad), 0.],
+                        [np.sin(crota_rad), np.cos(crota_rad), 0.],
+                        [0., 0., 1.]])
+    return rot_mat
 

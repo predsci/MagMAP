@@ -6,6 +6,8 @@ import os
 import pickle
 import sys
 
+import pandas
+
 import oftpy.utilities.file_io.psi_hdf as psihdf
 import oftpy.database.db_classes as db
 import oftpy.database.db_funs as db_fun
@@ -170,31 +172,26 @@ class LosMagneto(LosImage):
         # Do interpolation
         interp_result = self.interp_data(R0, map_x, map_y, no_data_val=no_data_val)
 
-        origin_image = np.full(interp_result.data.shape, 0, dtype=DTypes.MAP_ORIGIN_IMAGE)
-        # if image number is entered, record in appropriate pixels
-        if image_num is not None:
-            origin_image[interp_result.data > no_data_val] = image_num
-
         # Partially populate a map object with grid and data info
-        map_out = PsiMap(interp_result.data, interp_result.x, interp_result.y,
-                         mu=interp_result.mu_mat, map_lon=interp_result.map_lon,
-                         origin_image=origin_image, no_data_val=no_data_val)
+        map_out = MagnetoMap(interp_result.data, interp_result.x, interp_result.y,
+                             mu=interp_result.mu_mat, no_data_val=no_data_val)
 
         # construct map_info df to record basic map info
-        map_info_df = pd.DataFrame(data=[[1, datetime.datetime.now()], ],
-                                   columns=["n_images", "time_of_compute"])
-        map_out.append_map_info(map_info_df)
+        # map_info_df = pd.DataFrame(data=[[1, datetime.datetime.now()], ],
+        #                            columns=["n_images", "time_of_compute"])
+        # map_out.append_map_info(map_info_df)
 
         return map_out
 
 
-def read_hmi720s(fits_file, make_map=False):
+def read_hmi720s(fits_file, make_map=False, solar_north_up=True):
     """
     Method for reading an HMI 720s FITS file to a LosMagneto class.  This
     includes a rotation to solar-north-up.
     fits_file: path to a raw fits file.
     make_map: boolean. Imbeds a sunpy.map object in the LosMagneto object. This allows
               many features, but is also redundant.
+    solar_north_up: boolean. Rotate the image such that solar north is up.
     output: an LosMagneto object.
 
     """
@@ -210,18 +207,25 @@ def read_hmi720s(fits_file, make_map=False):
     radius2_grid = x_raw_grid**2 + y_raw_grid**2
     radius_thresh = np.sqrt(np.min(radius2_grid[nan_index]))
 
-    # rotate image to solar north up. fill missing values with NaN to preserve
-    # standard HMI formatting
-    # first convert NaNs to 0. for rotation algorithm
-    map_raw.data[nan_index] = 0.
-    rot_map = prep.rotate_map_nopad(map_raw)
-    # get x and y axis
-    x, y = prep.get_scales_from_map(rot_map)
+    if solar_north_up:
+        # rotate image to solar north up. fill missing values with NaN to preserve
+        # standard HMI formatting
+        # first convert NaNs to 0. for rotation algorithm
+        map_raw.data[nan_index] = 0.
+        rot_map = prep.rotate_map_nopad(map_raw)
+        # get x and y axis
+        x, y = prep.get_scales_from_map(rot_map)
 
-    x_grid, y_grid = np.meshgrid(x, y)
-    radius2_grid = x_grid**2 + y_grid**2
-    new_nan_index = radius2_grid >= radius_thresh**2
-    rot_map.data[new_nan_index] = np.nan
+        x_grid, y_grid = np.meshgrid(x, y)
+        radius2_grid = x_grid**2 + y_grid**2
+        new_nan_index = radius2_grid >= radius_thresh**2
+        rot_map.data[new_nan_index] = np.nan
+    else:
+        rot_map = map_raw
+        # default image scales are arc-seconds increasing left and down.
+        # we prefer increasing right and up. so keep values, but reverse direction.
+        x = -x_raw
+        y = -y_raw
 
     # create the object
     los = LosMagneto(rot_map.data, x, y, sunpy_cmap=rot_map.cmap,
@@ -668,6 +672,209 @@ class PsiMap:
         return db_session
 
 
+class MagnetoMap(PsiMap):
+    """
+    Object that contains magnetogram-map information.  The Map object is structured like the database for convenience.
+        - Inherits from the PsiMap class.
+    """
+    def __init__(self, data=None, x=None, y=None, mu=None, no_data_val=-9999.0):
+        """
+        Class to hold the standard information for a PSI map image
+    for the CHD package.
+
+        - Here the map is minimally described by:
+            data: a 2D numpy array of values.
+            x: a 1D array of the solar x positions of each pixel [Carrington lon].
+            y: a 1D array of the solar y positions of each pixel [Sine lat].
+
+        - mu is optional and should be numpy arrays with
+            dimensions identical to 'data'.
+
+        Initialization also uses database definitions to generate empty dataframes
+        for metadata: method_info, data_info, map_info, and var_info
+        """
+        ### initialize class to create map list
+        if data is None:
+            self.data = self.x = self.y = ()
+        else:
+            # --- Initialize empty dataframes based on Table schema ---
+            # create the data tags
+            # self.data_info = init_df_from_declarative_base(db.EUV_Images)
+            # euv_image_cols = []
+            # for column in db.EUV_Images.__table__.columns:
+            #     euv_image_cols.append(column.key)
+            # data_files_cols = []
+            # for column in db.Data_Files.__table__.columns:
+            #     data_files_cols.append(column.key)
+            # data_cols = set().union(euv_image_cols, data_files_cols)
+            # self.data_info = pd.DataFrame(data=None, columns=data_cols)
+            # # map_info will be a combination of Data_Combos and EUV_Maps
+            # image_columns = []
+            # for column in db.Data_Combos.__table__.columns:
+            #     image_columns.append(column.key)
+            # map_columns = []
+            # for column in db.EUV_Maps.__table__.columns:
+            #     map_columns.append(column.key)
+            # df_cols = set().union(image_columns, map_columns)
+            # self.map_info = pd.DataFrame(data=None, columns=df_cols)
+            # # method_info is a combination of Var_Defs and Method_Defs
+            # meth_columns = []
+            # for column in db.Method_Defs.__table__.columns:
+            #     meth_columns.append(column.key)
+            # defs_columns = []
+            # for column in db.Var_Defs.__table__.columns:
+            #     defs_columns.append(column.key)
+            # df_cols = set().union(meth_columns, defs_columns)
+            # self.method_info = pd.DataFrame(data=None, columns=df_cols)
+
+            # until database definitions are set, initiate these to None
+            self.data_info = None
+            self.map_info = None
+            self.method_info = None
+
+            # Type cast data arrays
+            self.data = data.astype(DTypes.MAP_DATA)
+            self.x = x.astype(DTypes.MAP_AXES)
+            self.y = y.astype(DTypes.MAP_AXES)
+            # designate a 'no data' value for 'data' array
+            self.no_data_val = no_data_val
+            self.layers = pd.DataFrame(dict(layer_num=[0, ], layer_name=["magneto", ],
+                                            py_field_name=['data', ]))
+            # optional data handling
+            if mu is not None:
+                self.mu = mu.astype(DTypes.MAP_DATA)
+            else:
+                # create placeholder
+                self.mu = None
+
+
+    def write_to_file(self, base_path, map_type=None, filename=None, db_session=None):
+        """
+        Write the map object to hdf5 format
+        :param map_type: String describing map category (ex 'single_magneto', 'synoptic', etc)
+        :param base_path: String describing the base path to map directory tree.
+        :param filename: If None, code will auto-generate a path (relative to App.MAP_FILE_HOME) and filename.
+        Otherwise, this should be a string describing the relative path and filename.
+        :param db_session: If None, save the file. If an SQLAlchemy session is passed, also record
+        a map record in the database.
+        :return: updated PsiMap object
+        """
+
+        if filename is None and map_type is None:
+            sys.exit("When auto-generating filename and path (filename=None), map_type must be specified.")
+
+        if db_session is None:
+            if filename is None:
+                # # generate filename
+                # subdir, temp_fname = misc_helpers.construct_map_path_and_fname(base_path, self.map_info.date_mean[0],
+                #                                                                map_id, map_type, 'h5', mkdir=True)
+                # rel_path = os.path.join(subdir, temp_fname)
+                sys.exit("Currently no capability to auto-generate unique filenames without using the database. "
+                         "Please fill the 'filename' input when attempting to write_to_file() with no database"
+                         "connection/session 'db_session'.")
+            else:
+                rel_path = filename
+
+            # combine layers into a single array
+            data_array = np.expand_dims(self.data, axis=0)
+            z = np.array([0, ])
+
+            # add additional layers according to the 'layers' dataframe
+            layers_dim = self.layers.shape
+            if layers_dim[0] < 2:
+                sys.exit("HipFT files require at least two layers (ex. 'data' and 'assim_weights'). " +
+                         "Current map has less than 2.")
+            for ii in range(1, layers_dim[0]):
+                # we want array to be in stride order phi, theta, layer
+                # this is index order: data_array[layer, theta, phi]
+                new_layer = getattr(self, self.layers.py_field_name.iloc[ii])
+                new_layer = np.expand_dims(new_layer, axis=0)
+                data_array = np.append(data_array, new_layer, axis=0)
+                z = np.append(z, ii)
+
+            # convert elevation to inclination and flip array so that the theta scale is ascending
+            theta = np.pi/2 - self.y
+            theta_flip = np.flip(theta)
+            data_array_flip = np.flip(data_array, axis=1)
+
+            h5_filename = os.path.join(base_path, rel_path)
+            # write map to file
+            psihdf.wrh5_hipft_map(h5_filename, self.x, theta_flip, z, data_array_flip, method_info=self.method_info,
+                                  data_info=self.data_info, map_info=self.map_info, no_data_val=self.no_data_val,
+                                  layers=self.layers, assim_method=self.assim_method)
+            print("PsiMap object written to: " + h5_filename)
+
+        else:
+            sys.exit("Adding MagnetoMap to database not yet supported.")
+            self.map_info.loc[0, 'fname'] = filename
+            db_session, self = db_fun.add_map_dbase_record(db_session, self, base_path, map_type=map_type)
+
+        return db_session
+
+    def write_to_file_old(self, base_path, map_type=None, filename=None, db_session=None):
+        """
+        Write the map object to hdf5 format
+        :param map_type: String describing map category (ex 'single_magneto', 'synoptic', etc)
+        :param base_path: String describing the base path to map directory tree.
+        :param filename: If None, code will auto-generate a path (relative to App.MAP_FILE_HOME) and filename.
+        Otherwise, this should be a string describing the relative path and filename.
+        :param db_session: If None, save the file. If an SQLAlchemy session is passed, also record
+        a map record in the database.
+        :return: updated PsiMap object
+        """
+
+        if filename is None and map_type is None:
+            sys.exit("When auto-generating filename and path (filename=None), map_type must be specified.")
+
+        if db_session is None:
+            if filename is None:
+                # # generate filename
+                # subdir, temp_fname = misc_helpers.construct_map_path_and_fname(base_path, self.map_info.date_mean[0],
+                #                                                                map_id, map_type, 'h5', mkdir=True)
+                # rel_path = os.path.join(subdir, temp_fname)
+                sys.exit("Currently no capability to auto-generate unique filenames without using the database. "
+                         "Please fill the 'filename' input when attempting to write_to_file() with no database"
+                         "connection/session 'db_session'.")
+            else:
+                rel_path = filename
+
+            # combine layers into a single array
+            data_array = self.data
+            z = np.array([0, ])
+            if self.mu is not None:
+                # we want array to be in stride order phi, theta, layer
+                # this is index order: data_array[layer, theta, phi]
+                data_array = np.stack((data_array, self.mu), axis=0)
+                z = np.append(z, 1)
+
+            # convert elevation to inclination and flip array so that the theta scale is ascending
+            theta = np.pi/2 - self.y
+            theta_flip = np.flip(theta)
+            data_array_flip = np.flip(data_array, axis=1)
+
+            h5_filename = os.path.join(base_path, rel_path)
+            # write map to file
+            psihdf.wrh5_hipft_map(h5_filename, self.x, theta_flip, z, data_array_flip, method_info=self.method_info,
+                                  data_info=self.data_info, map_info=self.map_info, no_data_val=self.no_data_val,
+                                  layers=self.layers)
+            print("MagnetoMap object written to: " + h5_filename)
+
+        else:
+            sys.exit("Adding MagnetoMap to database not yet supported.")
+            self.map_info.loc[0, 'fname'] = filename
+            db_session, self = db_fun.add_map_dbase_record(db_session, self, base_path, map_type=map_type)
+
+        return db_session
+
+    def __copy__(self):
+        out = MagnetoMap(data=self.data, x=self.x, y=self.y, mu=self.mu,
+                         no_data_val=self.no_data_val)
+        out.append_map_info(self.map_info)
+        out.append_data_info(self.data_info)
+        out.append_method_info(self.method_info)
+        return out
+
+
 def read_psi_map(h5_file):
     """
     Open the file at path h5_file and convert contents to the PsiMap class.
@@ -689,6 +896,46 @@ def read_psi_map(h5_file):
         psi_map.append_map_info(map_info)
 
     return psi_map
+
+
+def read_hipft_map(h5_file):
+    """
+    Open the file at path h5_file and convert contents to the MagnetoMap class.
+    :param h5_file: Full file path to a MagnetoMap hdf5 file.
+    :return: MagnetoMap object
+    """
+    # read the image and metadata
+    # remember that scales come back in stride-order (phi, theta, layer)
+    x, theta_flip, z, f_flip, method_info, data_info, map_info, no_data_val, layers, assim_method = \
+        psihdf.rdh5_hipft_map(h5_file)
+    # convert inclination back to elevation and flip array so that the theta scale is ascending
+    theta = np.flip(theta_flip)
+    y = -theta + np.pi/2
+    f = np.flip(f_flip, axis=1)
+
+    # extract primary data layer
+    data = np.squeeze(f[layers.layer_num[layers.layer_name == "magneto"], :, :])
+
+    # create the map structure
+    magneto_map = MagnetoMap(data, x, y, no_data_val=no_data_val)
+
+    # extract 2D layers from 3D array
+    for ii in range(1, layers.shape[0]):
+        layer_name = layers.py_field_name.iloc[ii]
+        layer_data = f[ii, :, :]
+        setattr(magneto_map, layer_name, np.squeeze(layer_data))
+
+    if assim_method is not None:
+        magneto_map.assim_method = assim_method
+    # fill in DB meta data
+    if method_info is not None:
+        magneto_map.append_method_info(method_info)
+    if data_info is not None:
+        magneto_map.append_data_info(data_info)
+    if map_info is not None:
+        magneto_map.append_map_info(map_info)
+
+    return magneto_map
 
 
 def init_df_from_declarative_base(base_object):

@@ -421,3 +421,159 @@ def rdh5_map(h5_filename):
 
     return (x, y, z, f, method_info, data_info, map_info, var_info,
             no_data_val)
+
+
+def wrh5_hipft_map(h5_filename, stride1, stride2, stride3, f, method_info=None, data_info=None, map_info=None,
+                   no_data_val=None, layers=None, assim_method=None):
+    """
+    Write an hdf5 file similar to the standard PSI format + secondary data + json metadata
+    - f is a 1, 2, or 3D numpy array
+        - Here we expect f to be a stack of 2D slices with the layers described in the
+          'layers' metadata.  But it also works if f is a true 3D grid.
+
+    - stride1, stride2, stride3 are the corresponding 1D scales (stride3 is expected to be an arbitrary list of
+      ascending integer layer numbers). The scales are in memory-striding order. In the Python (C) row-major
+      environment, this means that the f-array dimensions are ordered: f[stride3, stride2, stride1]. Or more
+      concretely: f.shape = (len(stride3), len(stride2), len(stride1)). This seems somewhat counter-intuitive,
+      but makes for a useable convention when potentially switching between column-major and row-major languages.
+
+    - layer is an optional dataframe describing the layers of f
+    - method_info, data_info, map_info, and var_info are optional
+      pandas dataframes of metadata that will be converted to a json string.
+      no_data_val is an optional scalar metadata.
+      - they are intended to hold descriptive info, not big arrays.
+      - saving it as an attribute (vs. a dataset) will preserve
+       compatibility with the PSI fortran tools.
+      - the metadata also can be dumped with h5dump from the command line
+        e.g.: h5dump -a chd_meta datafile.h5
+    """
+    h5file = h5.File(h5_filename, 'w')
+
+    # Create the dataset (Data is the name used by the psi data)).
+    h5file.create_dataset("Data", data=f)
+
+    # Make sure scales are the same precision as data.
+    stride1 = stride1.astype(f.dtype)
+    stride2 = stride2.astype(f.dtype)
+    stride3 = stride3.astype(f.dtype)
+
+    # Get number of dimensions:
+    ndims = np.ndim(f)
+
+    # Set the scales:
+    for i in range(0, ndims):
+        # reminder: these dimensions are in striding-order, not array index order
+        if i == 0:
+            h5file.create_dataset("dim1", data=stride1)
+            h5file['Data'].dims.create_scale(h5file['dim1'])
+            h5file['Data'].dims[0].attach_scale(h5file['dim1'])
+            h5file['Data'].dims[0].label = 'dim1'
+        elif i == 1:
+            h5file.create_dataset("dim2", data=stride2)
+            h5file['Data'].dims.create_scale(h5file['dim2'])
+            h5file['Data'].dims[1].attach_scale(h5file['dim2'])
+            h5file['Data'].dims[1].label = 'dim2'
+        elif i == 2:
+            h5file.create_dataset("dim3", data=stride3)
+            h5file['Data'].dims.create_scale(h5file['dim3'])
+            h5file['Data'].dims[2].attach_scale(h5file['dim3'])
+            h5file['Data'].dims[2].label = 'dim3'
+
+    # Convert the metadata to a json string, save it as an "attribute"
+    if method_info is not None:
+        h5file.attrs['method_info'] = method_info.to_json(orient="split")
+    if data_info is not None:
+        h5file.attrs['data_info'] = data_info.to_json(orient="split")
+    if map_info is not None:
+        h5file.attrs['map_info'] = map_info.to_json(orient="split")
+    if layers is not None:
+        h5file.attrs['layers'] = layers.to_json(orient="split")
+    if assim_method is not None:
+        h5file.attrs['assim_method'] = assim_method
+    if no_data_val is not None:
+        h5file.attrs['no_data_val'] = no_data_val
+
+    # Close the file:
+    h5file.close()
+
+
+def rdh5_hipft_map(h5_filename):
+    """
+    Read an hdf5 file in the PSI-HIPFT map format
+    - f is a 1, 2, or 3D numpy array
+
+    - stride1, stride2, stride3 are the corresponding 1D scales (stride3 is expected to be an arbitrary list of
+      ascending integer layer numbers). The scales are in memory-striding order. In the Python (C) row-major
+      environment, this means that the f-array dimensions are ordered: f[stride3, stride2, stride1]. Or more
+      concretely: f.shape = (len(stride3), len(stride2), len(stride1)). This seems somewhat counter-intuitive,
+      but makes for a useable convention when potentially switching between column-major and row-major languages.
+
+    - layers is an optional dataframe describing the layers of f
+    - method_info, data_info, map_info, and var_info are optional
+      pandas dataframes of metadata that will have been saved as
+      json strings.
+      no_data_val is an optional scalar metadata.
+    """
+    dim1 = np.array([])
+    dim2 = np.array([])
+    dim3 = np.array([])
+    f = np.array([])
+
+    h5file = h5.File(h5_filename, 'r')
+    f = h5file['Data']
+    ndims = np.ndim(f)
+
+    # Get the scales if they exist:
+    for i in range(0, ndims):
+        # reminder: these dimensions are in striding-order, not array index order
+        if i == 0:
+            if len(h5file['Data'].dims[0].keys()) != 0:
+                dim1 = h5file['Data'].dims[0][0]
+        elif i == 1:
+            if len(h5file['Data'].dims[1].keys()) != 0:
+                dim2 = h5file['Data'].dims[1][0]
+        elif i == 2:
+            if len(h5file['Data'].dims[2].keys()) != 0:
+                dim3 = h5file['Data'].dims[2][0]
+
+    stride1 = np.array(dim1)
+    stride2 = np.array(dim2)
+    stride3 = np.array(dim3)
+    f = np.array(f)
+
+    # load the metadata, convert it from the json string to a dict.
+    if 'layers' in h5file.attrs:
+        layers = pd.read_json(h5file.attrs['layers'], orient="split")
+    else:
+        layers = None
+    if 'method_info' in h5file.attrs:
+        method_info = pd.read_json(h5file.attrs['method_info'], orient="split")
+    else:
+        method_info = None
+    if 'data_info' in h5file.attrs:
+        data_info = pd.read_json(h5file.attrs['data_info'], orient="split")
+    elif 'image_info' in h5file.attrs:
+        # for backwards compatibility, look for image_info entry
+        data_info = pd.read_json(h5file.attrs['image_info'], orient="split")
+        # rename column
+        data_info.rename(columns={'image_id': 'data_id'}, inplace=True)
+    else:
+        data_info = None
+    if 'map_info' in h5file.attrs:
+        map_info = pd.read_json(h5file.attrs['map_info'], orient="split")
+    else:
+        map_info = None
+    if 'no_data_val' in h5file.attrs:
+        no_data_val = h5file.attrs['no_data_val']
+    else:
+        no_data_val = None
+    if 'assim_method' in h5file.attrs:
+        assim_method = h5file.attrs['assim_method']
+    else:
+        assim_method = None
+
+
+    h5file.close()
+
+    return (stride1, stride2, stride3, f, method_info, data_info, map_info,
+            no_data_val, layers, assim_method)
