@@ -11,6 +11,7 @@ import datetime
 import oftpy.utilities.datatypes.datatypes as psi_dtypes
 import oftpy.data.download.drms_helpers as drms_helpers
 import oftpy.maps.hipft_prep as hipft_prep
+import oftpy.maps.util.map_manip as map_manip
 
 # ---- Inputs -----------------------------
 
@@ -37,10 +38,14 @@ hipft_text_path = os.path.join(down_results_dir, hipft_text_filename)
 raw_data_dir = "/Users/turtle/Dropbox/MyOFT/download_test/hmi_raw"
 map_data_dir = "/Users/turtle/Dropbox/MyOFT/download_test/hmi_map"
 
-# map grid specifications
-R0 = 1.0
-map_nxcoord = 1024
-map_nycoord = 512
+# High-res map grid specifications
+map_nxcoord = 10240
+map_nycoord = 5120
+R0 = 0.995
+
+# reduced map grid specifications
+reduced_nxcoord = 1024
+reduced_nycoord = 512
 
 # ----- End Inputs -------------------------
 
@@ -51,6 +56,12 @@ x_axis = np.linspace(x_range[0], x_range[1], map_nxcoord)
 y_axis = np.linspace(y_range[0], y_range[1], map_nycoord)
 # interp expects sin(lat)
 sin_lat = np.sin(y_axis)
+
+# setup reduced-map grid
+reduced_x = np.linspace(x_range[0], x_range[1], reduced_nxcoord)
+reduced_y = np.linspace(y_range[0], y_range[1], reduced_nycoord)
+# interp expects sin(lat)
+reduced_sin_lat = np.sin(reduced_y)
 
 # initialize the helper class for HMI
 hmi = drms_helpers.HMI_M720s(verbose=True)
@@ -94,22 +105,37 @@ for index, row in match_times.iterrows():
         if not os.path.exists(os.path.join(map_data_dir, sub_dir)):
             os.makedirs(os.path.join(map_data_dir, sub_dir), mode=0o755)
         # for the purpose of this script, skip if file already exists
-        if os.path.exists(os.path.join(map_data_dir, map_rel)):
-            # record map relative path
-            match_times.loc[index, 'map_path'] = map_rel
-            print("Map file already exists. SKIPPING!")
-            continue
+        # if os.path.exists(os.path.join(map_data_dir, map_rel)):
+        #     # record map relative path
+        #     match_times.loc[index, 'map_path'] = map_rel
+        #     print("Map file already exists. SKIPPING!")
+        #     continue
         # load to LosMagneto object
         full_path = os.path.join(raw_data_dir, rel_path)
         hmi_im = psi_dtypes.read_hmi720s(full_path, make_map=False, solar_north_up=False)
+        # convert LOS B-field to B_r
+        hmi_im.get_coordinates(R0=R0)
+        hmi_im.add_Br(R0=R0)
+
+        # approximate 'full' map resolution
+        # if index == 0:
+        #     # image latitude per pixel at equator
+        #     eq_radian_per_pixel = np.max(np.abs(np.diff(hmi_im.lat[1000:3000, 2049])))
+        #     full_map_nycoord = np.ceil(np.pi/eq_radian_per_pixel)
+        #     full_map_nxcoord = 2*full_map_nycoord
+
         # interpolate to map
-        hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat)
+        hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat, interp_field="Br")
+        # down-sample by integration
+        reduced_map = map_manip.downsamp_reg_grid(hmi_map, reduced_sin_lat, reduced_x, image_method=0,
+                                                  periodic_x=True, y_units='sinlat', uniform_poles=True,
+                                                  uniform_no_data=True)
         # assign map y-axis back to phi
-        hmi_map.y = y_axis
+        reduced_map.y = reduced_y
         # set assimilation weights
-        hmi_map = hipft_prep.set_assim_wghts(hmi_map, assim_method="mu4_upton")
+        reduced_map = hipft_prep.set_assim_wghts(reduced_map, assim_method="mu4_upton")
         # write to hipft file
-        hmi_map.write_to_file(map_data_dir, map_type='magneto', filename=map_rel)
+        reduced_map.write_to_file(map_data_dir, map_type='magneto', filename=map_rel)
         # record map relative path
         match_times.loc[index, 'map_path'] = map_rel
     else:

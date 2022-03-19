@@ -986,7 +986,7 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
         origin_image = None
 
     # now apply reduction to chd map
-    if full_map.chd is not None:
+    if hasattr(full_map, "chd") and full_map.chd is not None:
         chd_data = full_map.chd.copy()
         if not uniform_no_data:
             # recalculate the no_data locations and area ratio
@@ -1045,7 +1045,7 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
         reduced_mu = None
 
     # now apply reduction to map_lon values (?)
-    if full_map.map_lon is not None:
+    if hasattr(full_map, "map_lon") and full_map.map_lon is not None:
         map_lon = None
     else:
         map_lon = None
@@ -1057,13 +1057,13 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
         no_data_vec = reduced_data[-1, ] == full_map.no_data_val
         if np.any(~no_data_vec):
             reduced_data[-1, ] = np.mean(reduced_data[-1, ~no_data_vec])
-        if chd_data is not None:
-            no_data_vec = chd_data[0, ] == full_map.no_data_val
+        if reduced_chd is not None:
+            no_data_vec = reduced_chd[0, ] == full_map.no_data_val
             if np.any(~no_data_vec):
-                chd_data[0, ] = np.mean(chd_data[0, ~no_data_vec])
-            no_data_vec = chd_data[-1, ] == full_map.no_data_val
+                reduced_chd[0, ] = np.mean(reduced_chd[0, ~no_data_vec])
+            no_data_vec = reduced_chd[-1, ] == full_map.no_data_val
             if np.any(~no_data_vec):
-                chd_data[-1, ] = np.mean(chd_data[-1, ~no_data_vec])
+                reduced_chd[-1, ] = np.mean(reduced_chd[-1, ~no_data_vec])
         if reduced_mu is not None:
             no_data_vec = reduced_mu[0, ] == full_map.no_data_val
             if np.any(~no_data_vec):
@@ -1082,9 +1082,9 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
             reduced_mu[:, 0], reduced_mu[:, -1] = periodic_x_avg(
                 reduced_mu[:, 0], reduced_mu[:, -1], new_x_widths, full_map.no_data_val)
 
-        if chd_data is not None:
-            chd_data[:, 0], chd_data[:, -1] = periodic_x_avg(
-                chd_data[:, 0], chd_data[:, -1], new_x_widths, full_map.no_data_val)
+        if reduced_chd is not None:
+            reduced_chd[:, 0], reduced_chd[:, -1] = periodic_x_avg(
+                reduced_chd[:, 0], reduced_chd[:, -1], new_x_widths, full_map.no_data_val)
 
     end_time = time.time()
     # print(end_time - start_time, " seconds elapsed.\n")
@@ -1098,22 +1098,34 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
     # plt.imshow(reduced_data, origin='lower')
     # plt.title("Reduced Map")
 
-    # alter method 'GridSize_sinLat' to new resolution
-    method_info = full_map.method_info.copy()
-    y_index = method_info.meth_name.eq('GridSize_sinLat') & \
-        method_info.var_name.eq('n_SinLat')
-    method_info.loc[y_index, 'var_val'] = new_y_n
-    x_index = method_info.meth_name.eq('GridSize_sinLat') & \
-        method_info.var_name.eq('n_phi')
-    method_info.loc[x_index, 'var_val'] = new_x_n
+    if full_map.method_info is not None:
+        # alter method 'GridSize_sinLat' to new resolution
+        method_info = full_map.method_info.copy()
+        y_index = method_info.meth_name.eq('GridSize_sinLat') & \
+            method_info.var_name.eq('n_SinLat')
+        method_info.loc[y_index, 'var_val'] = new_y_n
+        x_index = method_info.meth_name.eq('GridSize_sinLat') & \
+            method_info.var_name.eq('n_phi')
+        method_info.loc[x_index, 'var_val'] = new_x_n
+    else:
+        method_info = None
 
     # generate new map object and fill
-    new_map = psi_d_types.PsiMap(data=reduced_data, x=new_x, y=new_y, mu=reduced_mu,
-                                 origin_image=origin_image, map_lon=map_lon, chd=reduced_chd,
-                                 no_data_val=full_map.no_data_val)
-    new_map.append_method_info(method_info)
-    new_map.append_map_info(full_map.map_info)
-    new_map.append_data_info(full_map.data_info)
+    map_type = type(full_map).__name__
+    if map_type == "PsiMap":
+        new_map = psi_d_types.PsiMap(data=reduced_data, x=new_x, y=new_y, mu=reduced_mu,
+                                     origin_image=origin_image, map_lon=map_lon, chd=reduced_chd,
+                                     no_data_val=full_map.no_data_val)
+        new_map.append_method_info(method_info)
+        new_map.append_map_info(full_map.map_info)
+        new_map.append_data_info(full_map.data_info)
+    elif map_type == "MagnetoMap":
+        new_map = psi_d_types.MagnetoMap(data=reduced_data, x=new_x, y=new_y, mu=reduced_mu,
+                                         no_data_val=full_map.no_data_val)
+        # may need to add additional database info pass-through here
+
+    else:
+        new_map = None
 
     return new_map
 

@@ -94,7 +94,7 @@ class LosImage:
             delattr(self, 'map')
         self.map = sunpy.map.Map(self.data, sunpy_meta)
 
-    def interp_data(self, R0, map_x, map_y, no_data_val=-9999.):
+    def interp_data(self, R0, map_x, map_y, interp_field="data", no_data_val=-9999.):
 
         # Do interpolation
         interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val)
@@ -140,17 +140,59 @@ class LosMagneto(LosImage):
             super().__init__(data, x, y, sunpy_cmap=sunpy_cmap)
 
         # any initial data attributes unique to LosMagneto are setup here
+        self.Br = None
 
 
     def get_coordinates(self, R0=1.0, outside_map_val=-65500.):
+        """
+        Calculate additional coordinates for each pixel.
 
+        This function produces Carrington latitude and longitude in radians as well
+        as cosine center-to-limb angle (mu).
+
+        Parameters
+        ----------
+        R0 - number of solar radii for spherical coords
+        outside_map_val - a value for pixel coordinates that fall outside of R0
+
+        Returns
+        -------
+        self with additional numpy.ndarray for each lat, lon, and mu attributes.
+        """
         cr_lat = self.sunpy_meta['crlt_obs']
         cr_lon = self.sunpy_meta['crln_obs']
 
         super().get_coordinates(R0=R0, cr_lat=cr_lat, cr_lon=cr_lon,
                                 outside_map_val=outside_map_val)
 
-    def interp_to_map(self, R0=1.0, map_x=None, map_y=None, no_data_val=-65500., image_num=None):
+    def add_Br(self, mu_thresh=0.5, R0=1.):
+        """
+        Use the viewer angle to extrapolate radial B-field at each image pixel.  Radial
+        B-field is approximated as:
+        B_r = B_{los}/mu
+        where mu is cosine center-to-limb angle.
+
+        mu_thresh - scalar float [0., 1.]. To prevent denominator going to zero,
+                    this parameter creates a lower threshold for mu. Any mu value
+                    lower than mu_thresh will be set to mu_thresh for the B_r calc.
+        """
+        if self.mu is None:
+            self.get_coordinates(R0=R0)
+        # initialize radial B-field attribute
+        self.Br = np.zeros(shape=self.data.shape)
+        # determine off-disk pixels
+        outside_im_index = self.mu == self.no_data_val
+        # copy mu
+        temp_mu = self.mu.copy()
+        # apply mu-threshold
+        mu_thresh_index = temp_mu < mu_thresh
+        temp_mu[mu_thresh_index & ~outside_im_index] = mu_thresh
+        # calculate naive estimate of radial B-field
+        self.Br[~outside_im_index] = self.data[~outside_im_index]/temp_mu[~outside_im_index]
+
+
+    def interp_to_map(self, R0=1.0, map_x=None, map_y=None, interp_field="Br", no_data_val=-65500.,
+                      image_num=None):
 
         print("Converting " + self.sunpy_meta['telescop'] + "-" + str(self.sunpy_meta['content']) + " image from " +
               self.sunpy_meta['date_obs'] + " to a CR map.")
@@ -169,8 +211,11 @@ class LosMagneto(LosImage):
             map_y = np.linspace(y_range[0], y_range[1], map_nycoord, dtype=DTypes.MAP_AXES)
             map_x = np.linspace(x_range[0], x_range[1], map_nxcoord, dtype=DTypes.MAP_AXES)
 
+        if interp_field=="Br" and self.Br is None:
+            self.add_Br()
+
         # Do interpolation
-        interp_result = self.interp_data(R0, map_x, map_y, no_data_val=no_data_val)
+        interp_result = self.interp_data(R0, map_x, map_y, interp_field="Br", no_data_val=no_data_val)
 
         # Partially populate a map object with grid and data info
         map_out = MagnetoMap(interp_result.data, interp_result.x, interp_result.y,
@@ -311,7 +356,7 @@ class EUVImage(LosImage):
             map_x = np.linspace(x_range[0], x_range[1], map_nxcoord, dtype=DTypes.MAP_AXES)
 
         # Do interpolation
-        interp_result = self.interp_data(R0, map_x, map_y, no_data_val=no_data_val)
+        interp_result = self.interp_data(R0, map_x, map_y, interp_field="data", no_data_val=no_data_val)
 
         # some images are cutoff or have no_data_val within the image disk for some reason.
         # To mostly filter out these types of points, set any resulting negatives to no_data_val
