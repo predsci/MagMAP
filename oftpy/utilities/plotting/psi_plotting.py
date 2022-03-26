@@ -93,52 +93,47 @@ def PlotDiskImage(disk_image, nfig=None, mask_rad=1.5, title=None, plot_attr="da
     return None
 
 
-def PlotCorrectedImage(corrected_data, los_image, nfig=None, title=None):
-    # set color map
-    norm = mpl.colors.LogNorm(vmin=1.0, vmax=np.nanmax(los_image.data))
-    # norm = mpl.colors.LogNorm()
-    im_cmap = plt.get_cmap('sohoeit195')
-
-    plot_arr = corrected_data
-    plot_arr[plot_arr < .001] = .001
-
-    # plot the initial image
-    if nfig is None:
-        cur_figs = plt.get_fignums()
-        if not nfig:
-            nfig = 0
-        else:
-            nfig = cur_figs.max() + 1
-
-    plt.figure(nfig)
-
-    plt.imshow(plot_arr, extent=[los_image.x.min(), los_image.x.max(), los_image.y.min(), los_image.y.max()],
-               origin="lower", cmap=im_cmap, aspect="equal", norm=norm)
-    plt.xlabel("x (solar radii)")
-    plt.ylabel("y (solar radii)")
-    if title is not None:
-        plt.title(title)
-
-    return None
-
-
-def PlotMap(map_plot, nfig=None, title=None, map_type=None, save_map=False,
-            save_dir='maps/synoptic/'):
+def PlotMap(map_plot, nfig=None, title=None, map_type=None, plot_attr="data", y_units="sinlat",
+            save_map=False, save_dir='maps/synoptic/'):
     """
     Super simple plotting routine for PsiMap objects.
     imshow() should be replaced with pcolormesh() for generalizing to non-uniform rectilinear grids
     OR use Ron's Plot2D from PSI's 'tools'
     """
     # set color palette and normalization (improve by using Ron's colormap setup)
-    if map_type == "CHD":
+    if plot_attr == "chd":
         # norm = mpl.colors.LogNorm(vmin=0.01, vmax=np.nanmax(map_plot.data))
         im_cmap = plt.get_cmap('Greys')
         norm = mpl.colors.LogNorm(vmin=0.01, vmax=1)
         plot_mat = map_plot.chd.astype('float32')
-    else:
+    elif type(map_plot) == psi_dt.PsiMap:
         norm = mpl.colors.LogNorm(vmin=1.0, vmax=np.nanmax(map_plot.data))
         im_cmap = plt.get_cmap('sohoeit195')
-        plot_mat = map_plot.data
+        plot_mat = getattr(map_plot, plot_attr)
+    elif type(map_plot) == psi_dt.MagnetoMap:
+        norm = mpl.colors.Normalize(vmin=-25, vmax=25)
+        im_cmap = plt.get_cmap("seismic")
+        plot_mat = getattr(map_plot, plot_attr)
+    else:
+        norm = mpl.colors.Normalize(vmin=-25, vmax=25)
+        im_cmap = plt.get_cmap("seismic")
+        plot_mat = getattr(map_plot, plot_attr)
+
+    if y_units == "sinlat":
+        y_label = "Sine Latitude"
+        aspect = 360/2/2
+    elif y_units == "theta_inc":
+        y_label = "Inclination (rad)"
+        aspect = 360/np.pi/2
+    elif y_units == "theta_elev":
+        y_label = "Elevation (rad)"
+        aspect = 360/np.pi/2
+    elif y_units == "deg_inc":
+        y_label = "Inclination (deg)"
+        aspect = 360/180/2
+    elif y_units == "deg_elev":
+        y_label = "Elevation (deg)"
+        aspect = 360/180/2
 
     # plot the initial image
     if nfig is None:
@@ -154,7 +149,8 @@ def PlotMap(map_plot, nfig=None, title=None, map_type=None, save_map=False,
     # setup xticks
     xticks = np.arange(x_range[0], x_range[1] + 1, 30)
 
-    plt.figure(nfig)
+    plt.figure(nfig, figsize=[6.4, 3.5])
+    plt.subplots_adjust(left=0.10, bottom=0.11, right=0.97, top=0.95, wspace=0., hspace=0.)
     if map_type == 'Contour':
         x_extent = np.linspace(x_range[0], x_range[1], len(map_plot.x))
         plt.contour(x_extent, map_plot.y, map_plot.chd, origin="lower", colors='r',
@@ -165,9 +161,9 @@ def PlotMap(map_plot, nfig=None, title=None, map_type=None, save_map=False,
                     extent=[x_range[0], x_range[1], map_plot.y.min(), map_plot.y.max()], linewidths=0.3)
     else:
         plt.imshow(plot_mat, extent=[x_range[0], x_range[1], map_plot.y.min(), map_plot.y.max()],
-                   origin="lower", cmap=im_cmap, aspect=90.0, norm=norm)
+                   origin="lower", cmap=im_cmap, aspect=aspect, norm=norm)
     plt.xlabel("Carrington Longitude")
-    plt.ylabel("Sine Latitude")
+    plt.ylabel(y_label)
     plt.xticks(xticks)
 
     if title is not None:
@@ -182,7 +178,8 @@ def PlotMap(map_plot, nfig=None, title=None, map_type=None, save_map=False,
 
 def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
                     nfig=None, title=None, map_type=None, dpi=300,
-                    dark=True, quality=False, no_data=False):
+                    dark=True, quality=False, no_data=False,
+                    y_units="sinlat"):
     """
     Plot and save a PsiMap to png file as a frame for a video.
 
@@ -212,6 +209,9 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
                 map by the CH detection (above a threshold set by quality_map_plot_helper).
     :param no_data: bool
                 Flag to plot the no-data regions as a gray strip (using masking)
+    :param y_units: character
+                Character string that determines the y-axis lable. Also effects
+                proper aspect ratio.
     :return: None
              This routine writes a file to save_path, but has no explicit output.
     """
@@ -221,9 +221,31 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
         norm = mpl.colors.Normalize(vmin=int_range[0], vmax=int_range[1])
         plot_mat = map_plot.chd.astype('float32')
     else:
-        norm = mpl.colors.LogNorm(vmin=int_range[0], vmax=int_range[1])
-        im_cmap = copy.copy(plt.get_cmap('sohoeit195'))
-        plot_mat = map_plot.data
+        if type(map_plot) == psi_dt.PsiMap:
+            norm = mpl.colors.LogNorm(vmin=int_range[0], vmax=int_range[1])
+            im_cmap = copy.copy(plt.get_cmap('sohoeit195'))
+            plot_mat = map_plot.data
+        elif type(map_plot) == psi_dt.MagnetoMap:
+            norm = mpl.colors.Normalize(vmin=int_range[0], vmax=int_range[1])
+            im_cmap = copy.copy(plt.get_cmap('seismic'))
+            plot_mat = map_plot.data
+
+    # set y-axis label and aspect ratio
+    if y_units == "sinlat":
+        y_label = "Sine Latitude"
+        aspect = 360/2/2
+    elif y_units == "theta_inc":
+        y_label = "Inclination (rad)"
+        aspect = 360/np.pi/2
+    elif y_units == "theta_elev":
+        y_label = "Elevation (rad)"
+        aspect = 360/np.pi/2
+    elif y_units == "deg_inc":
+        y_label = "Inclination (deg)"
+        aspect = 360/180/2
+    elif y_units == "deg_elev":
+        y_label = "Elevation (deg)"
+        aspect = 360/180/2
 
     # mask for no data
     if no_data is True:
@@ -268,12 +290,10 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
             "grid.color": "dimgrey",
         })
 
-    # plt.style.use('grayscale')
-    # plt.figure(nfig, figsize=[6.4, 3.5], tight_layout=True)
     plt.figure(nfig, figsize=[6.4, 3.5])
     plt.subplots_adjust(left=0.10, bottom=0.11, right=0.97, top=0.95, wspace=0., hspace=0.)
     plt.xlabel("Carrington Longitude")
-    plt.ylabel("Sine Latitude")
+    plt.ylabel(y_label)
     plt.xticks(xticks)
     plt.yticks(yticks)
     plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
@@ -284,7 +304,7 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
 
     # Plot the map
     plt.imshow(plot_mat, extent=[x_range[0], x_range[1], map_plot.y.min(), map_plot.y.max()],
-               origin="lower", cmap=im_cmap, aspect=90.0, norm=norm)
+               origin="lower", cmap=im_cmap, aspect=aspect, norm=norm)
 
     # if its a quality map, call imshow again for each instrument to create overlays
     if quality is True:

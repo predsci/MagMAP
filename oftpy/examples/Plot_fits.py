@@ -18,4 +18,9 @@ hmi_los.add_Br()
 psi_plot.PlotDiskImage(disk_image=hmi_los, nfig=1, plot_attr="Br", title="Estimated B_{r} Disk")
 
 
+map_path = "/Users/turtle/Dropbox/SHARED-RC+MS/OFT/data/hmi_map/2021/01/29/hmi_map_720s_20210129T125953_.h5"
+
+hmi_map = psi_dtypes.read_hipft_map(map_path)
+
+psi_plot.PlotMap(map_plot=hmi_map, nfig=2, title="Downsampled B_{r}", plot_attr="data", y_units="theta_elev")
 
