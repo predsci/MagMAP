@@ -161,8 +161,11 @@ class HMI_M720s:
             if fits_key in hdr:
                 fits_val = hdr[fits_key]
 
-                # trap for nan ints to maintain the standard types JSOC uses in their fits files.
                 pandas_val = drms_frame[pandas_key][0]
+                # remove line breaks from strings
+                if type(pandas_val) is str:
+                    pandas_val = pandas_val.replace("\n", "")
+                # trap for nan ints to maintain the standard types JSOC uses in their fits files.
                 if type(fits_val) is int:
                     if math.isnan(pandas_val):
                         pandas_val = blank_val
