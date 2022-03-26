@@ -171,7 +171,7 @@ def interpolate2D_regular2irregular(reg_x, reg_y, reg_vals, eval_x, eval_y):
     :return: vector length K of interpolation results.
     """
     # Setup interpolation function and grd to evaluate on
-    interp_fn = sp_interp.RegularGridInterpolator((reg_x, reg_y), reg_vals)
+    interp_fn = sp_interp.RegularGridInterpolator((reg_x, reg_y), reg_vals, method='linear')
     eval_pts = np.array([eval_y, eval_x]).transpose()
 
     # Do interpolation
@@ -180,7 +180,7 @@ def interpolate2D_regular2irregular(reg_x, reg_y, reg_vals, eval_x, eval_y):
     return interp_result_vec
 
 
-def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999.):
+def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., interp_field="data"):
     map_nxcoord = len(map_x)
     map_nycoord = len(map_y)
 
@@ -209,12 +209,15 @@ def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999.):
     # only interpolate points on the front half of the sphere
     interp_index = image_z > 0
 
-    if type(image_in) is psi_dt.IITImage:
-        im_data = image_in.iit_data
-    elif type(image_in) is psi_dt.LBCCImage:
-        im_data = image_in.lbcc_data
-    else:
-        im_data = image_in.data
+    # if type(image_in) is psi_dt.IITImage:
+    #     im_data = image_in.iit_data
+    # elif type(image_in) is psi_dt.LBCCImage:
+    #     im_data = image_in.lbcc_data
+    # else:
+    #     im_data = image_in.data
+
+    # interpolate the specified attribute
+    im_data = getattr(image_in, interp_field)
     interp_vec = interpolate2D_regular2irregular(image_in.x, image_in.y, im_data, image_x[interp_index],
                                                  image_y[interp_index])
     interp_result_vec[interp_index] = interp_vec

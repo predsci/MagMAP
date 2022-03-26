@@ -97,7 +97,8 @@ class LosImage:
     def interp_data(self, R0, map_x, map_y, interp_field="data", no_data_val=-9999.):
 
         # Do interpolation
-        interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val)
+        interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val,
+                                                interp_field=interp_field)
 
         return interp_result
 
@@ -164,6 +165,12 @@ class LosMagneto(LosImage):
 
         super().get_coordinates(R0=R0, cr_lat=cr_lat, cr_lon=cr_lon,
                                 outside_map_val=outside_map_val)
+        # get_coordinates() assumes solar-north-up to calc CR lat/lon. This is generally
+        # not true for raw HMI_M disks. Remove until disk rotation is incorporated into
+        # get_coordinates()
+        self.lat = None
+        self.lon = None
+
 
     def add_Br(self, mu_thresh=0.5, R0=1.):
         """
@@ -211,7 +218,7 @@ class LosMagneto(LosImage):
             map_y = np.linspace(y_range[0], y_range[1], map_nycoord, dtype=DTypes.MAP_AXES)
             map_x = np.linspace(x_range[0], x_range[1], map_nxcoord, dtype=DTypes.MAP_AXES)
 
-        if interp_field=="Br" and self.Br is None:
+        if interp_field == "Br" and self.Br is None:
             self.add_Br()
 
         # Do interpolation
