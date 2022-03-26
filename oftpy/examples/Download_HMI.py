@@ -16,8 +16,9 @@ import oftpy.maps.util.map_manip as map_manip
 # ---- Inputs -----------------------------
 
 # Specify a vector of query times
-period_start = datetime.datetime(year=2021, month=1, day=2, hour=0)
-period_end = datetime.datetime(year=2021, month=1, day=30, hour=0)
+period_start = datetime.datetime(year=2012, month=1, day=1, hour=0)
+period_end = datetime.datetime(year=2015, month=1, day=1, hour=0)
+# period_end = datetime.datetime(year=2012, month=1, day=2, hour=0)
 period_range = [period_start, period_end]
 
 # define image search interval cadence and width
@@ -35,13 +36,13 @@ hipft_text_filename = "hipft_input_" + period_start.strftime("%Y-%m-%dT%H_%M_%S"
 hipft_text_path = os.path.join(down_results_dir, hipft_text_filename)
 
 # data-file dirs
-raw_data_dir = "/Users/turtle/Dropbox/MyOFT/download_test/hmi_raw"
-map_data_dir = "/Users/turtle/Dropbox/MyOFT/download_test/hmi_map"
+raw_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_raw"
+map_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_map"
 
 # High-res map grid specifications
 map_nxcoord = 10240
 map_nycoord = 5120
-R0 = 0.995
+R0 = 1.
 
 # reduced map grid specifications
 reduced_nxcoord = 1024
@@ -94,77 +95,30 @@ for index, row in match_times.iterrows():
             data_series=available_hmi.loc[best_match], base_dir=raw_data_dir,
             update=True, overwrite=False, verbose=True
         )
-        rel_path = os.path.join(sub_dir, fname)
-        match_times.loc[index, 'raw_path'] = rel_path
-
-        # determine path and filename
-        map_filename = fname.replace("_m_", "_map_")
-        map_filename = map_filename.replace(".fits", ".h5")
-        map_rel = os.path.join(sub_dir, map_filename)
-        # check that directory exists
-        if not os.path.exists(os.path.join(map_data_dir, sub_dir)):
-            os.makedirs(os.path.join(map_data_dir, sub_dir), mode=0o755)
-        # for the purpose of this script, skip if file already exists
-        # if os.path.exists(os.path.join(map_data_dir, map_rel)):
-        #     # record map relative path
-        #     match_times.loc[index, 'map_path'] = map_rel
-        #     print("Map file already exists. SKIPPING!")
-        #     continue
-        # load to LosMagneto object
-        full_path = os.path.join(raw_data_dir, rel_path)
-        hmi_im = psi_dtypes.read_hmi720s(full_path, make_map=False, solar_north_up=False)
-        # convert LOS B-field to B_r
-        hmi_im.get_coordinates(R0=R0)
-        hmi_im.add_Br(R0=R0)
-
-        # approximate 'full' map resolution
-        # if index == 0:
-        #     # image latitude per pixel at equator
-        #     eq_radian_per_pixel = np.max(np.abs(np.diff(hmi_im.lat[1000:3000, 2049])))
-        #     full_map_nycoord = np.ceil(np.pi/eq_radian_per_pixel)
-        #     full_map_nxcoord = 2*full_map_nycoord
-
-        # interpolate to map
-        hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat, interp_field="Br")
-        # down-sample by integration
-        reduced_map = map_manip.downsamp_reg_grid(hmi_map, reduced_sin_lat, reduced_x, image_method=0,
-                                                  periodic_x=True, y_units='sinlat', uniform_poles=True,
-                                                  uniform_no_data=True)
-        # assign map y-axis back to phi
-        reduced_map.y = reduced_y
-        # set assimilation weights
-        reduced_map = hipft_prep.set_assim_wghts(reduced_map, assim_method="mu4_upton")
-        # write to hipft file
-        reduced_map.write_to_file(map_data_dir, map_type='magneto', filename=map_rel)
-        # record map relative path
-        match_times.loc[index, 'map_path'] = map_rel
-    else:
-        match_times.loc[index, 'hmi_time'] = None
-        match_times.loc[index, 'url'] = None
 
     print("")
-
-# write download results to file
-match_times.to_csv(results_path, index=False, date_format="%Y-%m-%dT%H:%M:%S", float_format='%.5f')
-
-## FORMAT SUMMARY FILE FOR HIPFT
-# remove rows with hmi_time==None
-reduced_match_times = match_times.loc[~match_times.hmi_time.isna(), :]
-reduced_match_times = reduced_match_times.reset_index()
-# save summary dataframe to file
-write_df = reduced_match_times.loc[:, ['target_time', 'hmi_time', 'map_path']]
-write_df = write_df.rename(columns=dict(target_time='target_datetime', hmi_time='hmi_datetime'))
-# add fractional days since unix-epoch
-target_datetime = write_df.target_datetime.dt.to_pydatetime()
-target_unix_seconds = [float(target_datetime[ii].strftime("%s")) for ii in range(len(target_datetime))]
-target_unix_days = [x/(60*60*24) for x in target_unix_seconds]
-hmi_datetime = write_df.hmi_datetime.dt.to_pydatetime()
-hmi_unix_seconds = [float(hmi_datetime[ii].strftime("%s")) for ii in range(len(hmi_datetime))]
-hmi_unix_days = [x/(60*60*24) for x in hmi_unix_seconds]
-# add new columns to dataframe
-unix_time_df = pd.DataFrame(dict(target_unix_days=target_unix_days, hmi_unix_days=hmi_unix_days))
-write_df = pd.concat([unix_time_df, write_df], axis=1, ignore_index=True)
-# write to csv
-write_df.to_csv(hipft_text_path, index=False, date_format="%Y-%m-%dT%H:%M:%S", float_format='%.5f')
+#
+# # write download results to file
+# match_times.to_csv(results_path, index=False, date_format="%Y-%m-%dT%H:%M:%S", float_format='%.5f')
+#
+# ## FORMAT SUMMARY FILE FOR HIPFT
+# # remove rows with hmi_time==None
+# reduced_match_times = match_times.loc[~match_times.hmi_time.isna(), :]
+# reduced_match_times = reduced_match_times.reset_index()
+# # save summary dataframe to file
+# write_df = reduced_match_times.loc[:, ['target_time', 'hmi_time', 'map_path']]
+# write_df = write_df.rename(columns=dict(target_time='target_datetime', hmi_time='hmi_datetime'))
+# # add fractional days since unix-epoch
+# target_datetime = write_df.target_datetime.dt.to_pydatetime()
+# target_unix_seconds = [float(target_datetime[ii].strftime("%s")) for ii in range(len(target_datetime))]
+# target_unix_days = [x/(60*60*24) for x in target_unix_seconds]
+# hmi_datetime = write_df.hmi_datetime.dt.to_pydatetime()
+# hmi_unix_seconds = [float(hmi_datetime[ii].strftime("%s")) for ii in range(len(hmi_datetime))]
+# hmi_unix_days = [x/(60*60*24) for x in hmi_unix_seconds]
+# # add new columns to dataframe
+# unix_time_df = pd.DataFrame(dict(target_unix_days=target_unix_days, hmi_unix_days=hmi_unix_days))
+# write_df = pd.concat([unix_time_df, write_df], axis=1, ignore_index=True)
+# # write to csv
+# write_df.to_csv(hipft_text_path, index=False, date_format="%Y-%m-%dT%H:%M:%S", float_format='%.5f')
 
 
