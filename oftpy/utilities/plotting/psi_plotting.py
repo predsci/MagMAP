@@ -3,6 +3,7 @@ Functions to plot EUV images and maps
 """
 
 import os
+import sys
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import copy
@@ -11,6 +12,7 @@ from matplotlib.lines import Line2D
 import cv2
 
 import oftpy.utilities.datatypes.datatypes as psi_dt
+import oftpy.utilities.coord_manip as coord_manip
 
 
 def PlotDiskImage(disk_image, nfig=None, mask_rad=1.5, title=None, plot_attr="data"):
@@ -234,18 +236,29 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
     if y_units == "sinlat":
         y_label = "Sine Latitude"
         aspect = 360/2/2
+        yticks = np.arange(map_plot.y[0], map_plot.y[-1] + 0.01, 0.5)
+        ylabels = None
     elif y_units == "theta_inc":
         y_label = "Inclination (rad)"
         aspect = 360/np.pi/2
+        yticks = np.arange(map_plot.y[0], map_plot.y[-1], np.pi/4)
+        ylabels = [r"$2\pi$", r"$\frac{3\pi}{2}$", r"$\pi$", r"$\frac{\pi}{2}$", "0"]
     elif y_units == "theta_elev":
         y_label = "Elevation (rad)"
         aspect = 360/np.pi/2
+        # yticks = np.arange(map_plot.y[0], map_plot.y[-1], np.pi/4)
+        yticks = np.linspace(-np.pi/2, np.pi/2, 5)
+        ylabels = [r"$-\frac{\pi}{2}$", r"$-\frac{\pi}{4}$", "0", r"$\frac{\pi}{4}$", r"$\frac{\pi}{2}$"]
     elif y_units == "deg_inc":
         y_label = "Inclination (deg)"
         aspect = 360/180/2
+        yticks = np.arange(map_plot.y[0], map_plot.y[-1], 45)
+        ylabels = None
     elif y_units == "deg_elev":
         y_label = "Elevation (deg)"
         aspect = 360/180/2
+        yticks = np.arange(map_plot.y[0], map_plot.y[-1], 45)
+        ylabels = None
 
     # mask for no data
     if no_data is True:
@@ -255,7 +268,7 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
     # plot the initial image
     if nfig is None:
         cur_figs = plt.get_fignums()
-        if not nfig:
+        if not cur_figs:
             nfig = 0
         else:
             nfig = cur_figs.max() + 1
@@ -263,10 +276,8 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
     # convert map x-extents to degrees
     x_range = [180 * map_plot.x.min() / np.pi, 180 * map_plot.x.max() / np.pi]
     # setup xticks
-    xticks = np.arange(x_range[0], x_range[1] + 0.1, 60)
-
-    # setup yticks
-    yticks = np.arange(map_plot.y[0], map_plot.y[-1] + 0.01, 0.5)
+    # xticks = np.arange(x_range[0], x_range[1] + 0.1, 60)
+    xticks = np.linspace(start=0., stop=360., num=7)
 
     if dark:
         plt.style.use('dark_background')
@@ -295,7 +306,7 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
     plt.xlabel("Carrington Longitude")
     plt.ylabel(y_label)
     plt.xticks(xticks)
-    plt.yticks(yticks)
+    plt.yticks(yticks, ylabels)
     plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
     # plt.grid(alpha=0.6, linestyle='dotted', lw=1.0)
 
@@ -334,7 +345,7 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
     return None
 
 
-def euv_map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=None):
+def map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=None, map_type="EUV"):
     """
     Take a list of EUV synchronic maps and generate a video.
 
@@ -369,10 +380,17 @@ def euv_map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=No
     num_maps = map_info.shape[0]
     # generate first frame to establish framesize
     map_index = 0
-    row = map_info.loc[map_index]
+    row = map_info.iloc[map_index]
     # open map object
     map_path = os.path.join(map_dir, row.fname)
-    euv_map = psi_dt.read_psi_map(map_path)
+    if map_type == "EUV":
+        cur_map = psi_dt.read_psi_map(map_path)
+    elif map_type == "HMI_hipft":
+        cur_map = psi_dt.read_hipft_map(map_path)
+    else:
+        sys.exit("oftpy.utilities.plotting.psi_plotting.map_movie() \n" +
+                 "'map_type' only supports 'EUV' or 'HMI_hipft' at present.")
+
     # generate title (timestamp)
     title = row.date_mean.strftime("%Y/%m/%d, %H:%M:%S")
     # generate filename
@@ -380,13 +398,13 @@ def euv_map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=No
     frame_path = os.path.join(png_dir, frame_filename)
     # if no dpi specified, estimate dpi to preserve map resolution
     if dpi is None:
-        map_shape = euv_map.data.shape
+        map_shape = cur_map.data.shape
         width_dpi = map_shape[1]/5.57
         height_dpi = map_shape[0]/2.78
         dpi = np.ceil(max(width_dpi, height_dpi))
     # generate frame image
-    map_movie_frame(euv_map, int_range, save_path=frame_path,
-                    title=title, dpi=dpi)
+    map_movie_frame(cur_map, int_range, save_path=frame_path, no_data=True,
+                    title=title, dpi=dpi, y_units="theta_elev")
     # read image to cv2 format
     cv_im = cv2.imread(frame_path)
     # extract frame size
@@ -404,15 +422,18 @@ def euv_map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=No
         print("Processing map", map_index+1, "of", num_maps)
         # open map object
         map_path = os.path.join(map_dir, row.fname)
-        euv_map = psi_dt.read_psi_map(map_path)
+        if map_type == "EUV":
+            cur_map = psi_dt.read_psi_map(map_path)
+        elif map_type == "HMI_hipft":
+            cur_map = psi_dt.read_hipft_map(map_path)
         # generate title (timestamp)
         title = row.date_mean.strftime("%Y/%m/%d, %H:%M:%S")
         # generate filename
         frame_filename = "Frame" + str(map_index).zfill(5) + ".png"
         frame_path = os.path.join(png_dir, frame_filename)
         # generate frame image
-        map_movie_frame(euv_map, int_range, save_path=frame_path,
-                    title=title, dpi=dpi)
+        map_movie_frame(cur_map, int_range, save_path=frame_path, no_data=True,
+                        title=title, dpi=dpi, y_units="theta_elev")
         # read image to cv2 format
         cv_im = cv2.imread(frame_path)
         # add image to movie object
@@ -660,4 +681,119 @@ def PlotQualityMap(map_plot, origin_image, inst_list, color_list, nfig=None, tit
 
     plt.legend(custom_lines, inst_list)
     plt.show(block=False)
+    return None
+
+
+def PlotDisk_wInterpGrid(disk_image, nfig=None, mask_rad=1.5, title=None, plot_attr="data",
+                         map_x=None, map_y=None, R0=1.):
+    """
+    Super simple plotting routine for LosImage objects.
+    imshow() should be replaced with pcolormesh() for generalizing to non-uniform rectilinear grids
+    OR use Ron's Plot2D from PSI's 'tools'
+
+    x_axis:     1D array specifying CR map coords (rad)
+    y_axis:     1D array specifying CR map coords (sinlat)
+    R0:         float specifying CR map radius in solar radii
+    """
+
+    # mask-off pixels outside of mask_rad
+    # mesh_x, mesh_y = np.meshgrid(disk_image.x, disk_image.y)
+    # mesh_rad = np.sqrt(mesh_x**2 + mesh_y**2)
+    # plot_arr = disk_image.data
+    # plot_arr[mesh_rad > mask_rad] = 0.001
+
+    ## Generate CR map and transform to image space
+    # convert 1D map axes to full list of CR coordinates
+    mat_x, mat_y = np.meshgrid(map_x, map_y)
+    # convert matrix of coords to vector of coords (explicitly select row-major vectorizing)
+    map_x_vec = mat_x.flatten(order="C")
+    map_y_vec = mat_y.flatten(order="C")
+    # determine if image is solar-north-up, or needs an additional rotation
+    if hasattr(disk_image, "sunpy_meta"):
+        if "crota2" in disk_image.sunpy_meta.keys():
+            image_crota2 = disk_image.sunpy_meta['crota2']
+        else:
+            image_crota2 = 0.
+    else:
+        image_crota2 = 0.
+    # convert map grid variables to image space
+    image_x, image_y, image_z, image_theta, image_phi = coord_manip.map_grid_to_image(
+        map_x_vec, map_y_vec, R0=R0, obsv_lon=disk_image.info['cr_lon'],
+        obsv_lat=disk_image.info['cr_lat'], image_crota2=image_crota2)
+    # only plot points on the front half of the sphere
+    CR_index = image_z > 0
+
+    ## Generate points for the radius plot
+    radians = np.linspace(start=0, stop=np.pi*2, num=5000)
+    x_radius = R0*np.sin(radians)
+    y_radius = R0*np.cos(radians)
+
+    ## Setup disk image plotting
+    if type(disk_image) in [psi_dt.EUVImage, psi_dt.IITImage, psi_dt.LBCCImage]:
+
+        # remove extremely small values from data so that log color scale treats them as black
+        # rather than white
+        if type(disk_image) is psi_dt.IITImage:
+            plot_arr = disk_image.iit_data
+        elif type(disk_image) is psi_dt.LBCCImage:
+            plot_arr = disk_image.lbcc_data
+        else:
+            plot_arr = disk_image.data
+
+        plot_arr[plot_arr < .001] = .001
+
+        # set color palette and normalization (improve by using Ron's colormap setup)
+        norm_max = max(1.01, np.nanmax(plot_arr))
+
+        if disk_image.info["instrument"] == "AIA":
+            cmap_str = "sdoaia" + str(disk_image.info["wavelength"])
+            norm = mpl.colors.LogNorm(vmin=10., vmax=norm_max)
+            # cmap_str = 'sohoeit195'
+        elif disk_image.info["instrument"] in ("EUVI-A", "EUVI-B"):
+            cmap_str = "sohoeit" + str(disk_image.info["wavelength"])
+            norm = mpl.colors.LogNorm(vmin=1.0, vmax=norm_max)
+        else:
+            cmap_str = 'sohoeit195'
+            norm = mpl.colors.LogNorm(vmin=1.0, vmax=norm_max)
+
+    elif type(disk_image) == psi_dt.LosMagneto:
+        cmap_str = "seismic"
+        # cmap_str = "RdBu"
+        norm = mpl.colors.Normalize(vmin=-25, vmax=25)
+
+    im_cmap = plt.get_cmap(cmap_str)
+
+    # plot the specified object attribute
+    plot_arr = getattr(disk_image, plot_attr)
+
+    # set x and y ticks
+    xticks = (-1., 0.,  1.)
+    yticks = (-1., 0.,  1.)
+
+
+    # plot the initial image
+    if nfig is None:
+        cur_figs = plt.get_fignums()
+        if not nfig:
+            nfig = 0
+        else:
+            nfig = cur_figs.max() + 1
+
+    plt.figure(nfig)
+
+    plt.imshow(plot_arr, extent=[disk_image.x.min(), disk_image.x.max(), disk_image.y.min(), disk_image.y.max()],
+               origin="lower", cmap=im_cmap, aspect="equal", norm=norm)
+    plt.xlabel("x (solar radii)")
+    plt.ylabel("y (solar radii)")
+    plt.xticks(xticks)
+    plt.yticks(yticks)
+    plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
+    if title is not None:
+        plt.title(title)
+
+    # add radius overlay
+    plt.plot(x_radius, y_radius, 'k-')
+    # add CR points overlay
+    plt.scatter(image_x[CR_index], image_y[CR_index], s=1, c='gray', marker='x', linewidths=0.5)
+
     return None
