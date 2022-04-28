@@ -41,8 +41,7 @@ map_data_dir = "/Users/turtle/Dropbox/MyOFT/download_test/hmi_map"
 # High-res map grid specifications
 map_nxcoord = 10240
 map_nycoord = 5120
-R0_Br = 1.
-R0_interp = .997
+R0 = 1.
 
 # reduced map grid specifications
 reduced_nxcoord = 1024
@@ -115,7 +114,7 @@ for index, row in match_times.iterrows():
         full_path = os.path.join(raw_data_dir, rel_path)
         hmi_im = psi_dtypes.read_hmi720s(full_path, make_map=False, solar_north_up=False)
         # convert to Br (with slightly larger radius to pad image for interpolation)
-        hmi_im.add_Br(mu_thresh=0.1, R0=R0_Br)
+        hmi_im.add_Br(mu_thresh=0.01, R0=R0)
 
         # approximate 'full' map resolution
         # if index == 0:
@@ -125,7 +124,7 @@ for index, row in match_times.iterrows():
         #     full_map_nxcoord = 2*full_map_nycoord
 
         # interpolate to map
-        hmi_map = hmi_im.interp_to_map(R0=R0_interp, map_x=x_axis, map_y=sin_lat, interp_field="Br")
+        hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat, interp_field="Br")
         # down-sample by integration
         reduced_map = map_manip.downsamp_reg_grid(hmi_map, reduced_sin_lat, reduced_x, image_method=0,
                                                   periodic_x=True, y_units='sinlat', uniform_poles=True,
