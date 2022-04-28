@@ -1,9 +1,11 @@
 """
 Set of functions to change coordinates and interpolate between images and maps
 """
+import sys
 
 import numpy as np
 import scipy.interpolate as sp_interp
+from multiprocessing import Pool
 
 import oftpy.utilities.datatypes.datatypes as psi_dt
 # import astropy_healpix
@@ -98,7 +100,8 @@ def map_grid_to_image(map_x, map_y, R0=1.0, obsv_lon=0.0, obsv_lat=0.0, image_cr
     return image3D_coord[0, :], image3D_coord[1, :], image3D_coord[2, :], image_theta, image_phi
 
 
-def image_grid_to_CR(image_x, image_y, R0=1.0, obsv_lat=0, obsv_lon=0, get_mu=False, outside_map_val=-9999.):
+def image_grid_to_CR(image_x, image_y, R0=1.0, obsv_lat=0, obsv_lon=0, get_mu=False, outside_map_val=-9999.,
+                     crota2=0.):
     """
     Given vector coordinate pairs in solar radii units and the observer angles, transform to map coords.
     :param image_x: vector of x coordinates
@@ -106,6 +109,7 @@ def image_grid_to_CR(image_x, image_y, R0=1.0, obsv_lat=0, obsv_lon=0, get_mu=Fa
     :param R0: Assumed radius in solar radii.
     :param obsv_lat: Carrington latitude (degrees from equator) of observing instrument
     :param obsv_lon: Carrington longitude (degrees) of observing instrument
+    :param crota2: Image-plane counterclockwise rotation needed for solar-north-up (degrees)
     :return:
     """
 
@@ -133,6 +137,9 @@ def image_grid_to_CR(image_x, image_y, R0=1.0, obsv_lat=0, obsv_lon=0, get_mu=Fa
     rot_mat = map_to_image_rot_mat(obsv_lon, obsv_lat)
     # invert/transpose for image-to-map rotation matrix
     rev_rot = rot_mat.transpose()
+    # generate rotation matrix (from image solar-north-up to image orientation)
+    rot_mat2 = snu_to_image_rot_mat(crota2)
+    # invert for image-to-snu
     # construct coordinate array
     coord_array = np.array([use_x, use_y, use_z])
     # apply rotation matrix to coordinates
@@ -170,8 +177,8 @@ def interpolate2D_regular2irregular(reg_x, reg_y, reg_vals, eval_x, eval_y):
     :param eval_y: numpy column vector (length K) of y-coordinates to evaluate at.
     :return: vector length K of interpolation results.
     """
-    # Setup interpolation function and grd to evaluate on
-    interp_fn = sp_interp.RegularGridInterpolator((reg_x, reg_y), reg_vals, method='linear')
+    # Setup interpolation function and grid to evaluate on
+    interp_fn = sp_interp.RegularGridInterpolator((reg_y, reg_x), reg_vals, method='linear')
     eval_pts = np.array([eval_y, eval_x]).transpose()
 
     # Do interpolation
@@ -180,7 +187,59 @@ def interpolate2D_regular2irregular(reg_x, reg_y, reg_vals, eval_x, eval_y):
     return interp_result_vec
 
 
-def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., interp_field="data"):
+def interpolate2D_regular2irregular_parallel(reg_x, reg_y, reg_vals, eval_x, eval_y, nprocs=1, tpp=5, p=None):
+    """
+
+    :param reg_x: numpy vector of x-coordinates (length N)
+    :param reg_y: numpy vector of y-coordinates (length M)
+    :param reg_vals: numpy MxN array_like containing the grid values
+    :param eval_x: numpy column vector (length K) of x-coordinates to evaluate at.
+    :param eval_y: numpy column vector (length K) of y-coordinates to evaluate at.
+    :param nprocs: integer
+                   number of processors to allow access to
+    :param tpp: integer
+                threads per process
+    :return:
+    """
+    if nprocs < 1:
+        sys.exit("coord_manip.interpolate2D_regular2irregular_parallel(): \n" +
+                 "Number of processors nprocs must be 1 or greater.")
+
+    # setup multiple threads
+    # p = Pool(nprocs)
+    if p is None:
+        sys.exit("coord_manip.interpolate2D_regular2irregular_parallel(): \n" +
+                 "Requires passing an active instance of multiprocessing.Pool().")
+
+    # Setup interpolation function and grid to evaluate on
+    interp_fn = sp_interp.RegularGridInterpolator((reg_y, reg_x), reg_vals, method='linear')
+    eval_pts = np.array([eval_y, eval_x]).transpose()
+
+    # divide eval points into equal segments
+    eval_n = len(eval_x)
+    step = int(np.ceil(eval_n/(tpp*nprocs)))
+    # create a list of array inputs for interp_fn()
+    var_list = list()
+    for ii in range(nprocs*tpp):
+        start = ii*step
+        end = (ii+1)*step
+        if end > eval_n:
+            end = eval_n
+        new_array = eval_pts[start:end, ]
+        var_list = var_list + [new_array, ]
+
+    # start evaluation
+    interp_result_list = p.map(interp_fn, var_list)
+    # close processor pool
+    # p.close()
+    # combine output back into one ndarray
+    interp_result_vec = np.concatenate(interp_result_list)
+
+    return interp_result_vec
+
+
+def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., interp_field="data",
+                            nprocs=1, tpp=1, p_pool=None):
     map_nxcoord = len(map_x)
     map_nycoord = len(map_y)
 
@@ -218,8 +277,24 @@ def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., inte
 
     # interpolate the specified attribute
     im_data = getattr(image_in, interp_field)
-    interp_vec = interpolate2D_regular2irregular(image_in.x, image_in.y, im_data, image_x[interp_index],
-                                                 image_y[interp_index])
+    # # check that image x and y are ascending
+    # image_in_x = image_in.x.copy()
+    # image_in_y = image_in.y.copy()
+    # if image_in_x[-1] < image_in_x[0]:
+    #     image_in_x = np.flip(image_in_x)
+    #     im_data = np.flip(im_data, axis=1)
+    # if image_in_y[-1] < image_in_y[0]:
+    #     image_in_y = np.flip(image_in_y)
+    #     im_data = np.flip(im_data, axis=0)
+
+    # interpolate
+    if nprocs <= 1:
+        interp_vec = interpolate2D_regular2irregular(image_in.x, image_in.y, im_data, image_x[interp_index],
+                                                     image_y[interp_index])
+    else:
+        interp_vec = interpolate2D_regular2irregular_parallel(image_in.x, image_in.y, im_data, image_x[interp_index],
+                                                              image_y[interp_index], nprocs=nprocs, tpp=tpp,
+                                                              p=p_pool)
     interp_result_vec[interp_index] = interp_vec
     # reformat result to matrix form
     interp_result = interp_result_vec.reshape((map_nycoord, map_nxcoord), order="C")
@@ -261,10 +336,18 @@ def snu_to_image_rot_mat(crota2):
     # that the image-space vertical axis is 'y' and increases up.  Positive z-axis is toward
     # the observer.
 
+    # From Thompson, 2005: Coordinate systems for solar image data
+    # rot_mat =  cos(CROTA)  -sin(CROTA)
+    #            sin(CROTA)   cos(CROTA)
+    # for image to solar-north-up coordinates. Here we want to rotate the opposite direction
+
     # convert to radians
     crota_rad = np.pi*crota2/180
-    rot_mat = np.array([[np.cos(crota_rad), -np.sin(crota_rad), 0.],
-                        [np.sin(crota_rad), np.cos(crota_rad), 0.],
+    rot_mat = np.array([[np.cos(crota_rad), np.sin(crota_rad), 0.],
+                        [-np.sin(crota_rad), np.cos(crota_rad), 0.],
                         [0., 0., 1.]])
+    # rot_mat = np.array([[np.cos(crota_rad), -np.sin(crota_rad), 0.],
+    #                     [np.sin(crota_rad), np.cos(crota_rad), 0.],
+    #                     [0., 0., 1.]])
     return rot_mat
 
