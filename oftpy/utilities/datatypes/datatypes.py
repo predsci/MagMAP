@@ -66,13 +66,25 @@ class LosImage:
         - mu: cosine of the center to limb angle
         """
 
+        # vectorize image axis grid
         x_mat, y_mat = np.meshgrid(self.x, self.y)
         x_vec = x_mat.flatten(order="C")
         y_vec = y_mat.flatten(order="C")
 
+        # determine if image is solar-north-up, or needs an additional rotation
+        if hasattr(self, "sunpy_meta"):
+            if "crota2" in self.sunpy_meta.keys():
+                image_crota2 = self.sunpy_meta['crota2']
+            else:
+                image_crota2 = 0.
+        else:
+            image_crota2 = 0.
+
+        # calculate the coordinates
         cr_theta_all, cr_phi_all, image_mu = image_grid_to_CR(x_vec, y_vec, R0=R0, obsv_lat=cr_lat,
                                                               obsv_lon=cr_lon, get_mu=True,
-                                                              outside_map_val=outside_map_val)
+                                                              outside_map_val=outside_map_val,
+                                                              crota2=image_crota2)
 
         cr_theta = cr_theta_all.reshape(self.data.shape, order="C")
         cr_phi = cr_phi_all.reshape(self.data.shape, order="C")
@@ -94,11 +106,12 @@ class LosImage:
             delattr(self, 'map')
         self.map = sunpy.map.Map(self.data, sunpy_meta)
 
-    def interp_data(self, R0, map_x, map_y, interp_field="data", no_data_val=-9999.):
+    def interp_data(self, R0, map_x, map_y, interp_field="data", no_data_val=-9999., nprocs=1, tpp=1, p_pool=None):
 
         # Do interpolation
         interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val,
-                                                interp_field=interp_field)
+                                                interp_field=interp_field, nprocs=nprocs, tpp=tpp,
+                                                p_pool=p_pool)
 
         return interp_result
 
@@ -143,7 +156,6 @@ class LosMagneto(LosImage):
         # any initial data attributes unique to LosMagneto are setup here
         self.Br = None
 
-
     def get_coordinates(self, R0=1.0, outside_map_val=-65500.):
         """
         Calculate additional coordinates for each pixel.
@@ -171,8 +183,7 @@ class LosMagneto(LosImage):
         self.lat = None
         self.lon = None
 
-
-    def add_Br(self, mu_thresh=0.5, R0=1.):
+    def add_Br(self, mu_thresh=0.01, R0=1.):
         """
         Use the viewer angle to extrapolate radial B-field at each image pixel.  Radial
         B-field is approximated as:
@@ -186,7 +197,9 @@ class LosMagneto(LosImage):
         if self.mu is None:
             self.get_coordinates(R0=R0)
         # initialize radial B-field attribute
-        self.Br = np.zeros(shape=self.data.shape)
+        # self.Br = np.zeros(shape=self.data.shape)
+        # keep un-altered pixels from outside R0
+        self.Br = np.copy(self.data)
         # determine off-disk pixels
         outside_im_index = self.mu == self.no_data_val
         # copy mu
@@ -197,9 +210,8 @@ class LosMagneto(LosImage):
         # calculate naive estimate of radial B-field
         self.Br[~outside_im_index] = self.data[~outside_im_index]/temp_mu[~outside_im_index]
 
-
     def interp_to_map(self, R0=1.0, map_x=None, map_y=None, interp_field="Br", no_data_val=-65500.,
-                      image_num=None):
+                      image_num=None, nprocs=1, tpp=1, p_pool=None):
 
         print("Converting " + self.sunpy_meta['telescop'] + "-" + str(self.sunpy_meta['content']) + " image from " +
               self.sunpy_meta['date_obs'] + " to a CR map.")
@@ -219,10 +231,14 @@ class LosMagneto(LosImage):
             map_x = np.linspace(x_range[0], x_range[1], map_nxcoord, dtype=DTypes.MAP_AXES)
 
         if interp_field == "Br" and self.Br is None:
-            self.add_Br()
+            self.add_Br(R0=R0)
 
         # Do interpolation
-        interp_result = self.interp_data(R0, map_x, map_y, interp_field="Br", no_data_val=no_data_val)
+        interp_result = self.interp_data(R0, map_x, map_y, interp_field=interp_field, no_data_val=no_data_val,
+                                         nprocs=nprocs, tpp=tpp, p_pool=p_pool)
+
+        # check for NaNs and set to no_data_val
+        interp_result.data[np.isnan(interp_result.data)] = no_data_val
 
         # Partially populate a map object with grid and data info
         map_out = MagnetoMap(interp_result.data, interp_result.x, interp_result.y,
@@ -249,35 +265,23 @@ def read_hmi720s(fits_file, make_map=False, solar_north_up=True):
     """
     # load data and header tuple into sunpy map type
     map_raw = sunpy.map.Map(fits_file)
-    # get orig map scales
-    x_raw, y_raw = prep.get_scales_from_map(map_raw)
-    # find all NaNs
-    nan_index = np.isnan(map_raw.data)
-    # generate xy-grids
-    x_raw_grid, y_raw_grid = np.meshgrid(x_raw, y_raw)
-    # record radius of measurements for post-rotation
-    radius2_grid = x_raw_grid**2 + y_raw_grid**2
-    radius_thresh = np.sqrt(np.min(radius2_grid[nan_index]))
 
     if solar_north_up:
         # rotate image to solar north up. fill missing values with NaN to preserve
         # standard HMI formatting
         # first convert NaNs to 0. for rotation algorithm
+        nan_index = np.isnan(map_raw.data)
         map_raw.data[nan_index] = 0.
         rot_map = prep.rotate_map_nopad(map_raw)
         # get x and y axis
         x, y = prep.get_scales_from_map(rot_map)
 
-        x_grid, y_grid = np.meshgrid(x, y)
-        radius2_grid = x_grid**2 + y_grid**2
-        new_nan_index = radius2_grid >= radius_thresh**2
-        rot_map.data[new_nan_index] = np.nan
     else:
         rot_map = map_raw
-        # default image scales are arc-seconds increasing left and down.
-        # we prefer increasing right and up. so keep values, but reverse direction.
-        x = -x_raw
-        y = -y_raw
+        # get scales manually. auto-generation of scales by sunpy generates unknown
+        # results when solar_north ~= image_up.  we want image-up and image-right
+        # always positive, with vertical/horizontal y/x-axes
+        x, y = prep.get_scales_from_fits(map_raw.meta)
 
     # create the object
     los = LosMagneto(rot_map.data, x, y, sunpy_cmap=rot_map.cmap,
@@ -729,7 +733,7 @@ class MagnetoMap(PsiMap):
     Object that contains magnetogram-map information.  The Map object is structured like the database for convenience.
         - Inherits from the PsiMap class.
     """
-    def __init__(self, data=None, x=None, y=None, mu=None, no_data_val=-9999.0):
+    def __init__(self, data=None, x=None, y=None, mu=None, no_data_val=-65500.):
         """
         Class to hold the standard information for a PSI map image
     for the CHD package.
@@ -988,6 +992,62 @@ def read_hipft_map(h5_file):
         magneto_map.append_map_info(map_info)
 
     return magneto_map
+
+
+def read_hmi_Mrmap_latlon_720s(fits_file, no_data_val=-65500.):
+    """
+    Method for reading an HMI_Mrmap_latlon_720s FITS file to a MagnetoMap class.
+    fits_file: path to a raw fits file.
+
+    output: a MagnetoMap object.
+
+    """
+    # load data and header tuple into sunpy map type
+    map_raw = sunpy.map.Map(fits_file)
+    # generate CR lat/lon from fits parameters
+    x, y = prep.get_scales_from_fits_map(map_raw.meta)
+
+    # initiate full-map
+    data = np.full([len(y), len(x)*2], fill_value=no_data_val)
+    full_map_x = np.linspace(0.1, 359.9, 1800, dtype=x.dtype)
+    full_map_y = np.linspace(-89.9, 89.9, 900, dtype=y.dtype)
+    full_map_x_rad = full_map_x * np.pi/180
+    full_map_y_rad = full_map_y * np.pi/180
+
+    # check for CR lon that overlaps periodic boundary
+    x_eps = .00001
+    left_index = np.argwhere(np.abs(x-360.1) < x_eps)
+    right_index = np.argwhere(np.abs(x + 0.1) < x_eps)
+
+    # index columns of map_raw.data into the full map 'data'
+    if not len(left_index) == 0:
+        # divide input map across left periodic boundary
+        per_index = left_index[0][0]
+        periodic = True
+    elif not len(right_index) == 0:
+        # divide input map across right periodic boundary
+        per_index = right_index[0][0] + 1
+        periodic = True
+    else:
+        periodic = False
+
+    if periodic:
+        left_fill = len(x) - per_index
+        data[:, :left_fill] = map_raw.data[:, per_index:]
+        right_fill = len(full_map_x) - per_index
+        data[:, right_fill:] = map_raw.data[:, :per_index]
+    else:
+        left_fill = np.argwhere(abs(full_map_x - x[0]) < x_eps)[0][0]
+        right_fill = left_fill + len(x)
+        data[:, left_fill:right_fill] = map_raw.data
+
+    # final check to replace NaNs with no_data_val
+    data[np.isnan(data)] = no_data_val
+
+    # create the object
+    br_map = MagnetoMap(data=data, x=full_map_x_rad, y=full_map_y_rad)
+
+    return br_map
 
 
 def init_df_from_declarative_base(base_object):
