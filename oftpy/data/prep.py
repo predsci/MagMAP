@@ -319,3 +319,86 @@ def get_scales_from_map(map):
     y = hdf_dtype(y_rs.value)
 
     return x, y
+
+
+def get_scales_from_fits(fits_meta):
+    """
+    Compute the solar X and solar Y 1D scale arrays from the fits metadata.
+
+    Return scales in solar radii and assume that image-up and image-right are positive.
+    :param fits_meta:   sunpy.util.metadata.MetaDict
+                        Meta data loaded from fits file by example = sunpy.map.Map()
+                        Meta data is accessed by 'example.meta'
+    :return:    tuple of arrays
+                First array is x-axis of image space in solar radii.
+                Second array is y-axis of image space in solar radii.
+    """
+
+    arcsec_per_radii = fits_meta['rsun_obs']
+    # y-axis pars
+    crpix2 = fits_meta['crpix2']
+    cdelt2 = fits_meta['cdelt2']
+    naxis2 = fits_meta['naxis2']
+    # x-axis pars
+    crpix1 = fits_meta['crpix1']
+    cdelt1 = fits_meta['cdelt1']
+    naxis1 = fits_meta['naxis1']
+
+    # pixel locations (starting at 1 and not 0, per the fits standard)
+    xpix_num = np.arange(start=1, stop=naxis1+1, step=1)
+    rel_xpix = xpix_num - crpix1
+    # convert to arcsec
+    x_arcsec = rel_xpix*cdelt1
+    # convert to solar radii
+    x_radii = x_arcsec/arcsec_per_radii
+
+    # pixel locations (starting at 1 and not 0, per the fits standard)
+    ypix_num = np.arange(start=1, stop=naxis2+1, step=1)
+    rel_ypix = ypix_num - crpix2
+    # convert to arcsec
+    y_arcsec = rel_ypix * cdelt2
+    # convert to solar radii
+    y_radii = y_arcsec / arcsec_per_radii
+
+    return x_radii, y_radii
+
+
+def get_scales_from_fits_map(fits_meta):
+    """
+    Compute the solar X and solar Y 1D scale arrays from the fits metadata.
+
+    Written specifically for HMI_Mrmap_latlon_720s fits files, but should generally
+    work to return X/Y coordinates in the native units.
+    :param fits_meta:   sunpy.util.metadata.MetaDict
+                        Meta data loaded from fits file by example = sunpy.map.Map()
+                        Meta data is accessed by 'example.meta'
+    :return:    tuple of arrays
+                First array is x-axis of image space in native units.
+                Second array is y-axis of image space in native units.
+    """
+
+    # y-axis pars
+    crpix2 = fits_meta['crpix2']
+    cdelt2 = fits_meta['cdelt2']
+    naxis2 = fits_meta['naxis2']
+    crval2 = fits_meta['crval2']
+    # x-axis pars
+    crpix1 = fits_meta['crpix1']
+    cdelt1 = fits_meta['cdelt1']
+    naxis1 = fits_meta['naxis1']
+    crval1 = fits_meta['crval1']
+
+    # pixel locations (starting at 1 and not 0, per the fits standard)
+    xpix_num = np.arange(start=1, stop=naxis1+1, step=1)
+    rel_xpix = xpix_num - crpix1
+    # convert to native units
+    x_native = rel_xpix*cdelt1 + crval1
+
+    # pixel locations (starting at 1 and not 0, per the fits standard)
+    ypix_num = np.arange(start=1, stop=naxis2+1, step=1)
+    rel_ypix = ypix_num - crpix2
+    # convert to native units
+    y_native = rel_ypix * cdelt2 + crval2
+
+    return x_native, y_native
+
