@@ -5,6 +5,8 @@ Includes routines for downloading, organizing, and manipulating FITS files.
 
 These might be split up into different modules later.
 """
+import re
+
 from six.moves.urllib.request import urlretrieve
 from six.moves.urllib.error import HTTPError, URLError
 import os
@@ -90,6 +92,8 @@ def construct_path_and_fname(base_dir, dtime, prefix, postfix, extension, inst=N
     # build the filename
     if inst is not None:
         fname = prefix + '_' + inst + "_" + YYYY + MM + DD + 'T' + HH + NN + SS + '_' + postfix + '.' + extension
+    elif postfix == "":
+        fname = prefix + '_' + YYYY + MM + DD + 'T' + HH + NN + SS + '.' + extension
     else:
         fname = prefix + '_' + YYYY + MM + DD + 'T' + HH + NN + SS + '_' + postfix + '.' + extension
 
@@ -328,3 +332,44 @@ def print_full_dataframe(df):
     pd.reset_option('display.max_columns')
     pd.reset_option('display.width')
     pd.reset_option('display.max_colwidth')
+
+
+def read_db_dir(dir_path):
+    """
+    Recursively walk through the directory and collect file dates and paths.
+
+    Parameters
+    ----------
+    dir_path - character string
+               The directory to be mapped.
+
+    Returns
+    -------
+    A dataframe with date and relative-file path.
+    """
+
+    out_df = pd.DataFrame(columns=['date', 'rel_path'])
+    all_paths = os.walk(dir_path)
+
+    for root, dirs, files in all_paths:
+        if len(files) == 0:
+            continue
+        # first check for and remove '.DS_Store'
+        valid_files = [x for x in files if x != ".DS_Store"]
+        if len(valid_files) > 0:
+            # loop through files and add to output data frame
+            for filename in valid_files:
+                # extract date (regex '\d{8}T\d{6}')
+                date_str = re.search("\d{8}T\d{6}", filename).group()
+                # construct relative path
+                full_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(full_path, dir_path)
+                new_row = pd.DataFrame(dict(date=[pd.to_datetime(date_str), ], rel_path=[rel_path, ]))
+                # add new row to output dataframe
+                # out_df = out_df.append(new_row)
+                out_df = pd.concat([out_df, new_row], axis=0, ignore_index=True)
+        else:
+            continue
+
+    return out_df
+
