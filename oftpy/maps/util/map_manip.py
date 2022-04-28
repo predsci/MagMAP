@@ -5,6 +5,7 @@ Functions to manipulate and combine maps
 import sys
 import numpy as np
 from scipy.interpolate import interp1d
+from scipy import sparse
 from skimage.measure import block_reduce
 import time
 
@@ -830,7 +831,7 @@ def downsamp_reg_grid_orig(map, new_y, new_x, image_method=0, chd_method=0, peri
 
 def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, periodic_x=True,
                       y_units='sinlat', uniform_poles=True, single_origin_image=None,
-                      uniform_no_data=True):
+                      uniform_no_data=True, sparse_wghts=False):
     """
     Input a PSI-map object (full_map) and re-sample to the new x, y coords.
     Assumes grids are regular, but non-uniform.
@@ -916,8 +917,13 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
     new_y_n = len(new_sin_lat)
     old_y_n = len(sin_lat)
     old_y_widths = np.diff(old_y_edges)
-    row_weight_mat = np.zeros((new_y_n, old_y_n), dtype=float)
-    row_da_weight  = np.zeros((new_y_n, old_y_n), dtype=float)
+    if sparse_wghts:
+        row_weight_mat = sparse.lil_matrix((new_y_n, old_y_n), dtype=full_map.data.dtype)
+        row_da_weight = sparse.lil_matrix((new_y_n, old_y_n), dtype=full_map.data.dtype)
+    else:
+        row_weight_mat = np.zeros((new_y_n, old_y_n), dtype=full_map.data.dtype)
+        row_da_weight = np.zeros((new_y_n, old_y_n), dtype=full_map.data.dtype)
+
     for new_y_index in range(new_y_n):
         # determine linear row-weighting of original pixels to new pixels
         # new_hist = np.ones(1)
@@ -940,8 +946,12 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
     new_x_n = len(new_x)
     old_x_n = len(full_map.x)
     old_x_widths = np.diff(old_x_edges)
-    column_weight_mat = np.zeros((old_x_n, new_x_n), dtype=float)
-    col_da_weight = np.zeros((old_x_n, new_x_n), dtype=float)
+    if sparse_wghts:
+        column_weight_mat = sparse.lil_matrix((old_x_n, new_x_n), dtype=full_map.data.dtype)
+        col_da_weight = sparse.lil_matrix((old_x_n, new_x_n), dtype=full_map.data.dtype)
+    else:
+        column_weight_mat = np.zeros((old_x_n, new_x_n), dtype=full_map.data.dtype)
+        col_da_weight = np.zeros((old_x_n, new_x_n), dtype=full_map.data.dtype)
     for new_x_index in range(new_x_n):
         # determine linear row-weighting of original pixels to new pixels
         # new_hist = np.ones(1)
@@ -963,14 +973,27 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
     no_data_index = full_data == full_map.no_data_val
     full_data[no_data_index] = 0.
     # apply the row and column reduction by matrix multiplication
-    row_reduced_data = np.matmul(row_weight_mat, full_data)
-    reduced_data = np.matmul(row_reduced_data, column_weight_mat)
-    # also calculate da in the new grid
-    reduced_grid_da = np.matmul(np.matmul(row_da_weight, da), col_da_weight)
+    if sparse_wghts:
+        row_weight_mat = row_weight_mat.tocsr()
+        column_weight_mat = column_weight_mat.tocsc()
+        reduced_data = row_weight_mat @ full_data @ column_weight_mat
+        # also calculate da in the new grid
+        reduced_grid_da = row_da_weight @ da @ col_da_weight
+    else:
+        row_reduced_data = np.matmul(row_weight_mat, full_data)
+        reduced_data = np.matmul(row_reduced_data, column_weight_mat)
+        # also calculate da in the new grid
+        reduced_grid_da = np.matmul(np.matmul(row_da_weight, da), col_da_weight)
+
     no_data_da = da.copy()
     no_data_da[no_data_index] = 0.
-    reduced_no_data_da = np.matmul(np.matmul(row_da_weight, no_data_da),
-                                   col_da_weight)
+    if sparse_wghts:
+        row_da_weight = row_da_weight.tocsr()
+        col_da_weight = col_da_weight.tocsc()
+        reduced_no_data_da = row_da_weight @ no_data_da @ col_da_weight
+    else:
+        reduced_no_data_da = np.matmul(np.matmul(row_da_weight, no_data_da),
+                                       col_da_weight)
     # use the area ratio to improve intensity estimate at data boundaries (and
     # better estimate the boundary)
     da_ratio = reduced_no_data_da/reduced_grid_da
