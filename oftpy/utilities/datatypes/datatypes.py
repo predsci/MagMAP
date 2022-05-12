@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import sunpy.map
 import sunpy.util.metadata
-from oftpy.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR
+from oftpy.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR, interp_los_image_to_map_yang
 from oftpy.settings.info import DTypes
 
 
@@ -106,12 +106,18 @@ class LosImage:
             delattr(self, 'map')
         self.map = sunpy.map.Map(self.data, sunpy_meta)
 
-    def interp_data(self, R0, map_x, map_y, interp_field="data", no_data_val=-9999., nprocs=1, tpp=1, p_pool=None):
+    def interp_data(self, R0, map_x, map_y, interp_field="data", no_data_val=-9999., nprocs=1, tpp=1,
+                    p_pool=None, y_cor=False, helio_proj=False):
 
         # Do interpolation
-        interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val,
-                                                interp_field=interp_field, nprocs=nprocs, tpp=tpp,
-                                                p_pool=p_pool)
+        if y_cor:
+            interp_result = interp_los_image_to_map_yang(self, R0, map_x, map_y, no_data_val=no_data_val,
+                                                         interp_field=interp_field, nprocs=nprocs, tpp=tpp,
+                                                         p_pool=p_pool)
+        else:
+            interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val,
+                                                    interp_field=interp_field, nprocs=nprocs, tpp=tpp,
+                                                    p_pool=p_pool, helio_proj=helio_proj)
 
         return interp_result
 
@@ -211,7 +217,7 @@ class LosMagneto(LosImage):
         self.Br[~outside_im_index] = self.data[~outside_im_index]/temp_mu[~outside_im_index]
 
     def interp_to_map(self, R0=1.0, map_x=None, map_y=None, interp_field="Br", no_data_val=-65500.,
-                      image_num=None, nprocs=1, tpp=1, p_pool=None):
+                      image_num=None, nprocs=1, tpp=1, p_pool=None, y_cor=False, helio_proj=False):
 
         print("Converting " + self.sunpy_meta['telescop'] + "-" + str(self.sunpy_meta['content']) + " image from " +
               self.sunpy_meta['date_obs'] + " to a CR map.")
@@ -235,7 +241,7 @@ class LosMagneto(LosImage):
 
         # Do interpolation
         interp_result = self.interp_data(R0, map_x, map_y, interp_field=interp_field, no_data_val=no_data_val,
-                                         nprocs=nprocs, tpp=tpp, p_pool=p_pool)
+                                         nprocs=nprocs, tpp=tpp, p_pool=p_pool, y_cor=y_cor, helio_proj=helio_proj)
 
         # check for NaNs and set to no_data_val
         interp_result.data[np.isnan(interp_result.data)] = no_data_val
@@ -1044,8 +1050,47 @@ def read_hmi_Mrmap_latlon_720s(fits_file, no_data_val=-65500.):
     # final check to replace NaNs with no_data_val
     data[np.isnan(data)] = no_data_val
 
+    ## Now add pixels at the periodic boundary and poles in order to match PSI mapping standard
+    # periodic boundary
+    left_nan_index = data[:, 0] == no_data_val
+    right_nan_index = data[:, -1] == no_data_val
+    periodic_boundary = np.full((len(y), 1), fill_value=no_data_val)
+    both_ind = ~left_nan_index & ~right_nan_index
+    periodic_boundary[both_ind, 0] = (data[both_ind, 0] + data[both_ind, -1])/2
+    left_ind = ~left_nan_index & right_nan_index
+    periodic_boundary[left_ind, 0] = (data[left_ind, 0]) / 2
+    right_ind = left_nan_index & ~right_nan_index
+    periodic_boundary[right_ind, 0] = (data[right_ind, -1]) / 2
+
+    data1 = np.append(periodic_boundary, data, axis=1)
+    data2 = np.append(data1, periodic_boundary, axis=1)
+    full_map_x_rad1 = np.append(0., full_map_x_rad)
+    full_map_x_rad2 = np.append(full_map_x_rad1, np.pi*2)
+
+    # poles
+    south_nan = data[0, :] == no_data_val
+    if south_nan.all():
+        fill_value = no_data_val
+    else:
+        mean_vals = data[0, ~south_nan]
+        fill_value = np.mean(mean_vals)
+    south_data = np.full((1, len(full_map_x_rad2)), fill_value=fill_value)
+
+    north_nan = data[-1, :] == no_data_val
+    if north_nan.all():
+        fill_value = no_data_val
+    else:
+        mean_vals = data[-1, ~north_nan]
+        fill_value = np.mean(mean_vals)
+    north_data = np.full((1, len(full_map_x_rad2)), fill_value=fill_value)
+
+    data3 = np.append(south_data, data2, axis=0)
+    data4 = np.append(data3, north_data, axis=0)
+    full_map_y_rad1 = np.append(-np.pi/2, full_map_y_rad)
+    full_map_y_rad2 = np.append(full_map_y_rad1, np.pi/2)
+
     # create the object
-    br_map = MagnetoMap(data=data, x=full_map_x_rad, y=full_map_y_rad)
+    br_map = MagnetoMap(data=data4, x=full_map_x_rad2, y=full_map_y_rad2)
 
     return br_map
 
