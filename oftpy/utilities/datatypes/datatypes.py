@@ -250,6 +250,10 @@ class LosMagneto(LosImage):
         map_out = MagnetoMap(interp_result.data, interp_result.x, interp_result.y,
                              mu=interp_result.mu_mat, no_data_val=no_data_val)
 
+        # transfer fits header information
+        if self.sunpy_meta is not None:
+            map_out.sunpy_meta = self.sunpy_meta
+
         # construct map_info df to record basic map info
         # map_info_df = pd.DataFrame(data=[[1, datetime.datetime.now()], ],
         #                            columns=["n_images", "time_of_compute"])
@@ -800,8 +804,11 @@ class MagnetoMap(PsiMap):
             self.y = y.astype(DTypes.MAP_AXES)
             # designate a 'no data' value for 'data' array
             self.no_data_val = no_data_val
+            # start a dataframe to keep track of multiple data layers
             self.layers = pd.DataFrame(dict(layer_num=[0, ], layer_name=["magneto", ],
                                             py_field_name=['data', ]))
+            # set placeholder for fits header info
+            self.sunpy_meta = None
             # optional data handling
             if mu is not None:
                 self.mu = mu.astype(DTypes.MAP_DATA)
@@ -810,7 +817,7 @@ class MagnetoMap(PsiMap):
                 self.mu = None
 
 
-    def write_to_file(self, base_path, map_type=None, filename=None, db_session=None):
+    def write_to_file(self, base_path, map_type=None, filename=None, db_session=None, AFT=False):
         """
         Write the map object to hdf5 format
         :param map_type: String describing map category (ex 'single_magneto', 'synoptic', etc)
@@ -819,6 +826,9 @@ class MagnetoMap(PsiMap):
         Otherwise, this should be a string describing the relative path and filename.
         :param db_session: If None, save the file. If an SQLAlchemy session is passed, also record
         a map record in the database.
+        :param AFT: True/False
+                    If True, write some additional fits_header info as top-level attributes in the
+                    hdf5 file.
         :return: updated PsiMap object
         """
 
@@ -859,11 +869,24 @@ class MagnetoMap(PsiMap):
             theta_flip = np.flip(theta)
             data_array_flip = np.flip(data_array, axis=1)
 
+            # Customization for AFT input
+            if AFT:
+                car_rot = self.sunpy_meta['car_rot']
+                crln_obs = self.sunpy_meta['crln_obs']
+                crlt_obs = self.sunpy_meta['crlt_obs']
+                t_rec = self.sunpy_meta['t_rec']
+            else:
+                car_rot = None
+                crln_obs = None
+                crlt_obs = None
+                t_rec = None
+
             h5_filename = os.path.join(base_path, rel_path)
             # write map to file
             psihdf.wrh5_hipft_map(h5_filename, self.x, theta_flip, z, data_array_flip, method_info=self.method_info,
                                   data_info=self.data_info, map_info=self.map_info, no_data_val=self.no_data_val,
-                                  layers=self.layers, assim_method=self.assim_method)
+                                  layers=self.layers, assim_method=self.assim_method, fits_header=self.sunpy_meta,
+                                  car_rot=car_rot, crln_obs=crln_obs, crlt_obs=crlt_obs, t_rec=t_rec)
             print("PsiMap object written to: " + h5_filename)
 
         else:
@@ -968,7 +991,7 @@ def read_hipft_map(h5_file):
     """
     # read the image and metadata
     # remember that scales come back in stride-order (phi, theta, layer)
-    x, theta_flip, z, f_flip, method_info, data_info, map_info, no_data_val, layers, assim_method = \
+    x, theta_flip, z, f_flip, method_info, data_info, map_info, no_data_val, layers, assim_method, sunpy_meta = \
         psihdf.rdh5_hipft_map(h5_file)
     # convert inclination back to elevation and flip array so that the theta scale is ascending
     theta = np.flip(theta_flip)
@@ -981,11 +1004,16 @@ def read_hipft_map(h5_file):
     # create the map structure
     magneto_map = MagnetoMap(data, x, y, no_data_val=no_data_val)
 
+    # record layers
+    magneto_map.layers = layers
     # extract 2D layers from 3D array
     for ii in range(1, layers.shape[0]):
         layer_name = layers.py_field_name.iloc[ii]
         layer_data = f[ii, :, :]
         setattr(magneto_map, layer_name, np.squeeze(layer_data))
+
+    # record sunpy_meta data (fits header)
+    magneto_map.sunpy_meta = sunpy_meta
 
     if assim_method is not None:
         magneto_map.assim_method = assim_method
@@ -1091,6 +1119,8 @@ def read_hmi_Mrmap_latlon_720s(fits_file, no_data_val=-65500.):
 
     # create the object
     br_map = MagnetoMap(data=data4, x=full_map_x_rad2, y=full_map_y_rad2)
+    # record fits header info
+    br_map.sunpy_meta = map_raw.meta
 
     return br_map
 

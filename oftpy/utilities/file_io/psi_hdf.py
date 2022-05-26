@@ -424,7 +424,8 @@ def rdh5_map(h5_filename):
 
 
 def wrh5_hipft_map(h5_filename, stride1, stride2, stride3, f, method_info=None, data_info=None, map_info=None,
-                   no_data_val=None, layers=None, assim_method=None):
+                   no_data_val=None, layers=None, assim_method=None, fits_header=None, car_rot=None, crln_obs=None,
+                   crlt_obs=None, t_rec=None):
     """
     Write an hdf5 file similar to the standard PSI format + secondary data + json metadata
     - f is a 1, 2, or 3D numpy array
@@ -492,6 +493,16 @@ def wrh5_hipft_map(h5_filename, stride1, stride2, stride3, f, method_info=None, 
         h5file.attrs['assim_method'] = assim_method
     if no_data_val is not None:
         h5file.attrs['no_data_val'] = no_data_val
+    if fits_header is not None:
+        h5file.attrs['fits_header'] = json.dumps(fits_header)
+    if car_rot is not None:
+        h5file.attrs['CAR_ROT'] = car_rot
+    if crln_obs is not None:
+        h5file.attrs['CRLN_OBS'] = crln_obs
+    if crlt_obs is not None:
+        h5file.attrs['CRLT_OBS'] = crlt_obs
+    if t_rec is not None:
+        h5file.attrs['T_REC'] = t_rec
 
     # Close the file:
     h5file.close()
@@ -571,9 +582,12 @@ def rdh5_hipft_map(h5_filename):
         assim_method = h5file.attrs['assim_method']
     else:
         assim_method = None
-
+    if 'fits_header' in h5file.attrs:
+        sunpy_meta = json.loads(h5file.attrs['fits_header'])
+    else:
+        sunpy_meta = None
 
     h5file.close()
 
     return (stride1, stride2, stride3, f, method_info, data_info, map_info,
-            no_data_val, layers, assim_method)
+            no_data_val, layers, assim_method, sunpy_meta)
