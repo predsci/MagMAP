@@ -239,16 +239,18 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
         yticks = np.arange(map_plot.y[0], map_plot.y[-1] + 0.01, 0.5)
         ylabels = None
     elif y_units == "theta_inc":
-        y_label = "Inclination (rad)"
+        y_label = "Colatitude"
         aspect = 360/np.pi/2
         yticks = np.arange(map_plot.y[0], map_plot.y[-1], np.pi/4)
-        ylabels = [r"$2\pi$", r"$\frac{3\pi}{2}$", r"$\pi$", r"$\frac{\pi}{2}$", "0"]
+        # ylabels = [r"$2\pi$", r"$\frac{3\pi}{2}$", r"$\pi$", r"$\frac{\pi}{2}$", "0"]
+        ylabels = ["180", "135", "90", "45", "0"]
     elif y_units == "theta_elev":
-        y_label = "Elevation (rad)"
+        y_label = "Latitude"
         aspect = 360/np.pi/2
         # yticks = np.arange(map_plot.y[0], map_plot.y[-1], np.pi/4)
         yticks = np.linspace(-np.pi/2, np.pi/2, 5)
-        ylabels = [r"$-\frac{\pi}{2}$", r"$-\frac{\pi}{4}$", "0", r"$\frac{\pi}{4}$", r"$\frac{\pi}{2}$"]
+        # ylabels = [r"$-\frac{\pi}{2}$", r"$-\frac{\pi}{4}$", "0", r"$\frac{\pi}{4}$", r"$\frac{\pi}{2}$"]
+        ylabels = ["-90", "-45", "0", "45", "90"]
     elif y_units == "deg_inc":
         y_label = "Inclination (deg)"
         aspect = 360/180/2
@@ -387,6 +389,8 @@ def map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=None, 
         cur_map = psi_dt.read_psi_map(map_path)
     elif map_type == "HMI_hipft":
         cur_map = psi_dt.read_hipft_map(map_path)
+    elif map_type == "HMI_Mrmap":
+        cur_map = psi_dt.read_hmi_Mrmap_latlon_720s(map_path)
     else:
         sys.exit("oftpy.utilities.plotting.psi_plotting.map_movie() \n" +
                  "'map_type' only supports 'EUV' or 'HMI_hipft' at present.")
@@ -426,6 +430,8 @@ def map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=None, 
             cur_map = psi_dt.read_psi_map(map_path)
         elif map_type == "HMI_hipft":
             cur_map = psi_dt.read_hipft_map(map_path)
+        elif map_type == "HMI_Mrmap":
+            cur_map = psi_dt.read_hmi_Mrmap_latlon_720s(map_path)
         # generate title (timestamp)
         title = row.date_mean.strftime("%Y/%m/%d, %H:%M:%S")
         # generate filename
