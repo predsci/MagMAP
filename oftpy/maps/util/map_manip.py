@@ -652,39 +652,39 @@ def combine_timewgt_maps(weight, sum_wgt, map_list, mu_cutoff=0.0):
     return euv_combined, sum_wgt
 
 
-def downsamp_mean_unifgrid(map, new_y_size, new_x_size, chd_flag=True):
-
-    # calculate block size
-    x_block_size = np.ceil(map.x.len()/new_x_size)
-    y_block_size = np.ceil(map.y.len()/new_y_size)
-    block_size = (x_block_size, y_block_size)
-    # replace no-data-vals with NaNs
-
-    # use the mean to downsample
-    new_data = block_reduce(map.data, block_size=block_size, func=np.nanmean,
-                            cval=np.nan)
-    # convert NaNs back to no-data-vals
-
-    # calculate new x and y centers
-
-    # generate a copy of the map and update values
-
-    if chd_flag:
-        # also downsample the coronal hole detection grid
-        # replace no-data-vals with NaNs
-
-        # use the mean to downsample
-        new_data = block_reduce(map.data, block_size=block_size, func=np.nanmean,
-                                cval=np.nan)
-        # convert NaNs back to no-data-vals
-
-        # update map
-
-    else:
-        # assign downsampled map.chd to Null
-        pass
-
-    return new_map
+# def downsamp_mean_unifgrid(map, new_y_size, new_x_size, chd_flag=True):
+#
+#     # calculate block size
+#     x_block_size = np.ceil(map.x.len()/new_x_size)
+#     y_block_size = np.ceil(map.y.len()/new_y_size)
+#     block_size = (x_block_size, y_block_size)
+#     # replace no-data-vals with NaNs
+#
+#     # use the mean to downsample
+#     new_data = block_reduce(map.data, block_size=block_size, func=np.nanmean,
+#                             cval=np.nan)
+#     # convert NaNs back to no-data-vals
+#
+#     # calculate new x and y centers
+#
+#     # generate a copy of the map and update values
+#
+#     if chd_flag:
+#         # also downsample the coronal hole detection grid
+#         # replace no-data-vals with NaNs
+#
+#         # use the mean to downsample
+#         new_data = block_reduce(map.data, block_size=block_size, func=np.nanmean,
+#                                 cval=np.nan)
+#         # convert NaNs back to no-data-vals
+#
+#         # update map
+#
+#     else:
+#         # assign downsampled map.chd to Null
+#         pass
+#
+#     return new_map
 
 
 def downsamp_reg_grid_orig(map, new_y, new_x, image_method=0, chd_method=0, periodic_x=False):
@@ -829,12 +829,19 @@ def downsamp_reg_grid_orig(map, new_y, new_x, image_method=0, chd_method=0, peri
                                  no_data_val=map.no_data_val)
 
 
-def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, periodic_x=True,
-                      y_units='sinlat', uniform_poles=True, single_origin_image=None,
-                      uniform_no_data=True, sparse_wghts=False):
+def downsamp_reg_grid(full_map, new_y, new_x, new_x_extents=None, new_y_extents=None,
+                      full_x_extents=None, full_y_extents=None,
+                      image_method=0, chd_method=0, periodic_x=True, y_units='sinlat', uniform_poles=True,
+                      single_origin_image=None, uniform_no_data=True, out_full_latlon=True, sparse_wghts=False):
     """
     Input a PSI-map object (full_map) and re-sample to the new x, y coords.
-    Assumes grids are regular, but non-uniform.
+
+    Grid definition: Assumes grids are regular, but non-uniform.  Input grid is defined by
+    full_map.x and full_map.y.  Output grid is defined by new_x and new_y.  When extents are
+    not explicitly specified, it is assumed that the min/max of each axis defines the
+    extent of that axis (which implies a half-pixel at each edge).  All other axis values
+    are assumed to be grid-centers.  When extents are specified, all axis values are assumed
+    to be grid/pixel centers.
 
     :param full_map: PsiMap object
                 The full-map (covers full sphere) to be downsampled
@@ -844,6 +851,22 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
     :param new_x: Array like
                   Vector of pixel centers. Currently only support longitude in
                   radians (phi).
+    :param new_x_extents: list-like; len(new_x_extents) = 2
+                          Depending on grid-definition, the x-extents of the output
+                          grid may exceed the extents of 'new_x'. If None, assume
+                          new_x_extents = [np.min(new_x), np.max(new_x)].
+    :param new_y_extents: list-like; len(new_y_extents) = 2
+                          Depending on grid-definition, the y-extents of the output
+                          grid may exceed the extents of 'new_y'. If None, assume
+                          new_x_extents = [np.min(new_y), np.max(new_y)].
+    :param full_x_extents: list-like; len(full_x_extents) = 2
+                           Depending on grid-definition, the x-extents of the input
+                           grid may exceed the extents of full_map.x. If None, assume
+                           full_x_extents = [np.min(full_map.x), np.max(full_map.x)].
+    :param full_y_extents: list-like; len(full_y_extents) = 2
+                           Depending on grid-definition, the y-extents of the input
+                           grid may exceed the extents of full_map.y. If None, assume
+                           full_y_extents = [np.min(full_map.y), np.max(full_map.y)].
     :param image_method: integer
                          0 - Average across overlapped pixels to downsample
                          1 - Use random sampling to downsample (not yet supported)
@@ -866,49 +889,116 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
                             locations are consistent across all map grids (data, chd,
                             mu).  When 'no_data' pixels vary from grid to grid, set
                             to False.
+    :param sparse_wghts: True/False
+                         Use sparse matrices to hold/apply the reduction operators.
     :return: PsiMap object
              The new map object with grid defined by new_x and new_y.
     """
-    #
+    # Determine/check the output grid extents
+    if new_x_extents is not None:
+        valid_extents_x = (np.min(new_x) >= new_x_extents[0]) & (np.max(new_x) <= new_x_extents[1])
+        if not valid_extents_x:
+            raise ValueError("The new grid defined by 'new_x' does not lie entirely within 'new_x_extents'")
+        new_x_extents = np.array(new_x_extents)
+    else:
+        new_x_extents = np.array([np.min(new_x), np.max(new_x)])
+    if new_y_extents is not None:
+        valid_extents_y = (np.min(new_y) >= new_y_extents[0]) & (np.max(new_y) <= new_y_extents[1])
+        if not valid_extents_y:
+            raise ValueError("The new grid defined by 'new_y' does not lie entirely within 'new_y_extents'")
+        new_y_extents = np.array(new_y_extents)
+    else:
+        new_y_extents = np.array([np.min(new_y), np.max(new_y)])
+
+    # Determine/check the input grid extents
+    if full_x_extents is not None:
+        valid_extents_x = (np.min(full_map.x) >= full_x_extents[0]) & (np.max(full_map.x) <= full_x_extents[1])
+        if not valid_extents_x:
+            raise ValueError("The new grid defined by 'full_map.x' does not lie entirely within 'full_x_extents'")
+        full_x_extents = np.array(full_x_extents)
+    else:
+        full_x_extents = np.array([np.min(full_map.x), np.max(full_map.x)])
+    if full_y_extents is not None:
+        valid_extents_y = (np.min(full_map.y) >= full_y_extents[0]) & (np.max(full_map.y) <= full_y_extents[1])
+        if not valid_extents_y:
+            raise ValueError("The new grid defined by 'full_map.y' does not lie entirely within 'full_y_extents'")
+        full_y_extents = np.array(full_y_extents)
+    else:
+        full_y_extents = np.array([np.min(full_map.y), np.max(full_map.y)])
 
     # check that new coord range does not exceed old coord range
-    x_in_range = (full_map.x.min() <= new_x.min()) & (full_map.x.max() >= new_x.max())
-    y_in_range = (full_map.y.min() <= new_y.min()) & (full_map.y.max() >= new_y.max())
+    x_in_range = (full_x_extents[0] <= new_x_extents[0]) & (full_x_extents[1] >= new_x_extents[1])
+    y_in_range = (full_y_extents[0] <= new_y_extents[0]) & (full_y_extents[1] >= new_y_extents[1])
     if not x_in_range or not y_in_range:
-        raise ValueError("The new grid defined by 'new_x' and 'new_y' exceeds the"
-                         "range of the existing grid defined by full_map.x and full_map.y.")
+        raise ValueError("The new grid extents exceed the"
+                         "range of the existing grid extents.")
 
     start_time = time.time()
     # generate MapMesh object for both grids
     # new_theta = -np.arcsin(new_y) + np.pi/2
     # new_mesh = MapMesh(new_x, new_theta)
     if y_units == "sinlat":
-        old_theta = -np.arcsin(full_map.y) + np.pi/2
+        full_theta = -np.arcsin(full_map.y) + np.pi/2
+        full_theta_extents = -np.arcsin(full_y_extents) + np.pi / 2
         sin_lat = full_map.y
         new_sin_lat = new_y
+        new_sinlat_extents = new_y_extents
+        new_theta = -np.arcsin(new_y) + np.pi/2
     elif y_units == "lat_rad":
-        old_theta = -full_map.y + np.pi/2
+        full_theta = -full_map.y + np.pi/2
+        full_theta_extents = -full_y_extents + np.pi/2
         sin_lat = np.sin(full_map.y)
         new_sin_lat = np.sin(new_y)
+        new_sinlat_extents = np.sin(new_y_extents)
+        new_theta = -new_y + np.pi/2
     elif y_units == "lat_deg":
-        old_theta = -(np.pi/180)*full_map.y + np.pi/2
+        full_theta = -(np.pi/180)*full_map.y + np.pi/2
+        full_theta_extents = -(np.pi/180)*full_y_extents + np.pi/2
         sin_lat = np.sin((np.pi/180)*full_map.y)
         new_sin_lat = np.sin((np.pi/180)*new_y)
+        new_sinlat_extents = np.sin((np.pi/180)*new_y_extents)
+        new_theta = -(np.pi/180)*new_y + np.pi/2
     else:
-        old_theta = full_map.y
+        full_theta = full_map.y
+        full_theta_extents = full_y_extents
         sin_lat = np.sin(-full_map.y + np.pi/2)
         new_sin_lat = np.sin(-new_y + np.pi/2)
-    old_mesh = MapMesh(full_map.x, old_theta)
-    # the theta grid is reversed from what MapMesh expects so change sign on da
-    da = np.transpose(-old_mesh.da.copy())
-    # new_da = np.transpose(-new_mesh.da.copy())
-    # generate bin edges for each grid
-    new_y_interior_edges = (new_sin_lat[0:-1]+new_sin_lat[1:])/2
-    new_y_edges = np.concatenate([[new_sin_lat[0]], new_y_interior_edges, [new_sin_lat[-1]]])
+        new_sinlat_extents = np.sin(-new_y_extents + np.pi/2)
+        new_theta = new_y
+
+    ## determine area of each CR map pixel
+    phi_half = np.diff(full_map.x)/2 + full_map.x[:-1]
+    lower_phi = np.append(full_x_extents[0], phi_half)
+    upper_phi = np.append(phi_half, full_x_extents[1])
+    diff_phi = upper_phi - lower_phi
+
+    if y_units == "sinlat":
+        sinlat_half = np.diff(full_map.y)/2 + full_map.y[:-1]
+        theta_half = -np.arcsin(sinlat_half) + np.pi/2
+    else:
+        theta_half = np.diff(full_theta)/2 + full_theta[:-1]
+    lower_theta = np.append(full_theta_extents[0], theta_half)
+    upper_theta = np.append(theta_half, full_theta_extents[1])
+    diff_theta = np.abs(upper_theta - lower_theta)
+    full_sinlat_extents = np.sin(-full_theta_extents + np.pi/2)
+
+    diff_phi_mat, diff_theta_mat = np.meshgrid(diff_phi, diff_theta)
+    da = np.matmul(np.diag(np.sin(full_theta)), diff_theta_mat * diff_phi_mat)
+
+    ## generate bin edges for each grid
+    if y_units == "sinlat":
+        new_y_interior_edges = (new_sin_lat[0:-1]+new_sin_lat[1:])/2
+    else:
+        new_y_interior_theta = (new_theta[0:-1] + new_theta[1:])/2
+        new_y_interior_edges = np.sin(-new_y_interior_theta + np.pi/2)
+    new_y_edges = np.concatenate([[new_sinlat_extents[0]], new_y_interior_edges, [new_sinlat_extents[1]]])
     new_x_interior_edges = (new_x[0:-1] + new_x[1:])/2
-    new_x_edges = np.concatenate([[new_x[0]], new_x_interior_edges, [new_x[-1]]])
-    old_y_interior_edges = (sin_lat[0:-1] + sin_lat[1:])/2
-    old_y_edges = np.concatenate([[sin_lat[0]], old_y_interior_edges, [sin_lat[-1]]])
+    new_x_edges = np.concatenate([[new_x_extents[0]], new_x_interior_edges, [new_x_extents[1]]])
+    if y_units == "sinlat":
+        old_y_interior_edges = sinlat_half
+    else:
+        old_y_interior_edges = np.sin(-theta_half + np.pi/2)
+    old_y_edges = np.concatenate([[full_sinlat_extents[0]], old_y_interior_edges, [full_sinlat_extents[1]]])
     old_x_interior_edges = (full_map.x[0:-1] + full_map.x[1:])/2
     old_x_edges = np.concatenate([[full_map.x[0]], old_x_interior_edges, [full_map.x[-1]]])
 
@@ -1146,7 +1236,7 @@ def downsamp_reg_grid(full_map, new_y, new_x, image_method=0, chd_method=0, peri
         new_map = psi_d_types.MagnetoMap(data=reduced_data, x=new_x, y=new_y, mu=reduced_mu,
                                          no_data_val=full_map.no_data_val)
         # may need to add additional database info pass-through here
-
+        new_map.sunpy_meta = full_map.sunpy_meta
     else:
         new_map = None
 
