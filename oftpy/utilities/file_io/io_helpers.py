@@ -371,5 +371,8 @@ def read_db_dir(dir_path):
         else:
             continue
 
+    # sort dataframe by date (and reset row index)
+    out_df.sort_values(by='date', inplace=True, ignore_index=True)
+
     return out_df
 
