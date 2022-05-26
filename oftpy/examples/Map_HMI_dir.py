@@ -25,8 +25,8 @@ map_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_map"
 
 # select all maps between these dates
 #2016-03-23T20:58:14.90
-min_datetime_thresh = datetime.datetime(2016, 3, 23, 15, 0, 0)
-max_datetime_thresh = datetime.datetime(2018, 1, 1, 0, 0, 0)
+min_datetime_thresh = datetime.datetime(2012, 1, 14, 0, 0, 0)
+max_datetime_thresh = datetime.datetime(2012, 1, 17, 0, 0, 0)
 
 # number of processors for interpolation parallelization
 nprocs = 4
@@ -99,18 +99,13 @@ for index, row in available_raw.iterrows():
     if not os.path.exists(os.path.join(map_data_dir, sub_dir)):
         os.makedirs(os.path.join(map_data_dir, sub_dir), mode=0o755)
     # for the purpose of this script, skip if file already exists
-    if os.path.exists(os.path.join(map_data_dir, map_rel)):
-        print("Map file already exists. SKIPPING!")
-        continue
+    # if os.path.exists(os.path.join(map_data_dir, map_rel)):
+    #     print("Map file already exists. SKIPPING!")
+    #     continue
     # load to LosMagneto object
     full_path = os.path.join(raw_data_dir, rel_path)
     hmi_im = psi_dtypes.read_hmi720s(full_path, make_map=False, solar_north_up=False)
     IOtime += time.time() - start_time
-
-    # convert to Br (with slightly larger radius to pad image for interpolation)
-    start_time = time.time()
-    hmi_im.add_Br(mu_thresh=0.01, R0=R0)
-    image_proc_time += time.time() - start_time
 
     # approximate 'full' map resolution
     # if index == 0:
@@ -124,9 +119,13 @@ for index, row in available_raw.iterrows():
 
     start_time = time.time()
     # interpolate to map
-    hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat, interp_field="Br",
-                                   nprocs=nprocs, tpp=tpp, p_pool=p_pool)
+    hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat, interp_field="data",
+                                   nprocs=nprocs, tpp=tpp, p_pool=p_pool, y_cor=False, helio_proj=True)
     interp_time += time.time() - start_time
+
+    # convert interpolated map values to Br
+    data_index = hmi_map.data > hmi_map.no_data_val
+    hmi_map.data[data_index] = hmi_map.data[data_index] / hmi_map.mu[data_index]
 
     start_time = time.time()
     # down-sample by integration
