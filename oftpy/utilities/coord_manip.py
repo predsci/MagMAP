@@ -149,11 +149,17 @@ def map_grid_to_helioprojective(map_x, map_y, R0=1.0, obsv_lon=0.0, obsv_lat=0.0
     ## Convert image helio-centric to the native image coordinates (helio-projective)
     # convert D to solar-radii (to match x, y, z units)
     D = D_sun_obs/r_sun_ref
-    d = np.sqrt(image3D_coord[0, :]**2 + image3D_coord[1, :]**2 + (D - image3D_coord[2, :])**2)
-    Tx = np.arctan2(image3D_coord[0, :], D - image3D_coord[2, :])
+    D_minus_z = D - image3D_coord[2, :]
+    xy_sq = image3D_coord[0, :]**2 + image3D_coord[1, :]**2
+    d = np.sqrt(xy_sq + D_minus_z**2)
+    Tx = np.arctan2(image3D_coord[0, :], D_minus_z)
     Ty = np.arcsin(image3D_coord[1, :]/d)
+    # use intermediate values to also calculate alpha (angle from observer/sun-center line to
+    # pixel center. Sometimes referred to as \theta_{\rho}
+    rho = np.sqrt(xy_sq)
+    alpha = np.arctan2(rho, D_minus_z)
 
-    return Tx, Ty, image3D_coord[2, :], image_theta, image_phi
+    return Tx, Ty, image3D_coord[2, :], image_theta, image_phi, alpha
 
 
 def image_grid_to_CR(image_x, image_y, R0=1.0, obsv_lat=0, obsv_lon=0, get_mu=False, outside_map_val=-9999.,
@@ -320,7 +326,7 @@ def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., inte
     if helio_proj:
         D_sun_obs = image_in.sunpy_meta['dsun_obs']
         r_sun_ref = image_in.sunpy_meta['rsun_ref']
-        image_x, image_y, image_z, image_theta, image_phi = map_grid_to_helioprojective(
+        image_x, image_y, image_z, image_theta, image_phi, alpha = map_grid_to_helioprojective(
             map_x_vec, map_y_vec, R0=R0,
             obsv_lon=image_in.info['cr_lon'],
             obsv_lat=image_in.info['cr_lat'],
@@ -358,9 +364,9 @@ def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., inte
         image_in_x = image_in_x*image_in.sunpy_meta['rsun_obs']
         image_in_y = image_in_y*image_in.sunpy_meta['rsun_obs']
         # At 1 AU, this could be well approximated as np.sqrt(image_x**2 + image_y**2).
-        # For generality, we do the full calculation.
-        alpha = np.arctan2(np.sqrt(np.cos(image_y) ** 2 * np.sin(image_x) ** 2 + np.sin(image_y) ** 2),
-                           np.cos(image_y) * np.cos(image_x))
+        # For generality, we do the full calculation. (now moved inside map_grid_to_helioprojective()
+        # alpha = np.arctan2(np.sqrt(np.cos(image_y) ** 2 * np.sin(image_x) ** 2 + np.sin(image_y) ** 2),
+        #                    np.cos(image_y) * np.cos(image_x))
         # convert CR axes from radians to arcsec
         image_x = image_x * 206264.806
         image_y = image_y * 206264.806
