@@ -16,7 +16,8 @@ import numpy as np
 import pandas as pd
 import sunpy.map
 import sunpy.util.metadata
-from oftpy.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR, interp_los_image_to_map_yang
+from oftpy.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR, interp_los_image_to_map_yang, \
+    interp_los_image_to_map_par
 from oftpy.settings.info import DTypes
 
 
@@ -115,9 +116,14 @@ class LosImage:
                                                          interp_field=interp_field, nprocs=nprocs, tpp=tpp,
                                                          p_pool=p_pool)
         else:
-            interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val,
-                                                    interp_field=interp_field, nprocs=nprocs, tpp=tpp,
-                                                    p_pool=p_pool, helio_proj=helio_proj)
+            if nprocs > 1:
+                interp_result = interp_los_image_to_map_par(self, R0, map_x, map_y, no_data_val=no_data_val,
+                                                            interp_field=interp_field, nprocs=nprocs, tpp=tpp,
+                                                            p_pool=p_pool, helio_proj=helio_proj)
+            else:
+                interp_result = interp_los_image_to_map(self, R0, map_x, map_y, no_data_val=no_data_val,
+                                                        interp_field=interp_field, nprocs=nprocs, tpp=tpp,
+                                                        p_pool=p_pool, helio_proj=helio_proj)
 
         return interp_result
 

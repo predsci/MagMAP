@@ -5,7 +5,9 @@ import sys
 
 import numpy as np
 import scipy.interpolate as sp_interp
-from multiprocessing import Pool
+import multiprocessing as mp
+# change Pool default from 'fork' to 'spawn'
+# mp.set_start_method("spawn")
 
 import oftpy.utilities.datatypes.datatypes as psi_dt
 # import astropy_healpix
@@ -322,6 +324,7 @@ def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., inte
             image_crota2 = 0.
     else:
         image_crota2 = 0.
+
     # convert map grid variables to image space
     if helio_proj:
         D_sun_obs = image_in.sunpy_meta['dsun_obs']
@@ -395,6 +398,134 @@ def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., inte
     out_obj = psi_dt.InterpResult(interp_result, map_x, map_y, mu_mat=mu_mat)
 
     return out_obj
+
+
+def interp_los_image_to_map_par(image_in, R0, map_x, map_y, no_data_val=-9999., interp_field="data",
+                                nprocs=1, tpp=1, p_pool=None, helio_proj=False):
+    map_nxcoord = len(map_x)
+    map_nycoord = len(map_y)
+
+    # initialize grid to receive interpolation with values of NaN
+    interp_result = np.full((map_nycoord, map_nxcoord), no_data_val, dtype='<f4')
+    mu_result = np.full((map_nycoord, map_nxcoord), 0., dtype='<f4')
+
+    # convert 1D map axis to full list of coordinates
+    mat_x, mat_y = np.meshgrid(map_x, map_y)
+    # convert matrix of coords to vector of coords (explicitly select row-major vectorizing)
+    map_x_vec = mat_x.flatten(order="C")
+    map_y_vec = mat_y.flatten(order="C")
+    interp_result_vec = interp_result.flatten(order="C")
+    mu_vec = mu_result.flatten(order="C")
+
+    # put input axes in correct units
+    im_data = getattr(image_in, interp_field)
+    # put image axes in same coords as transformed map coords
+    image_in_x = image_in.x.copy()
+    image_in_y = image_in.y.copy()
+    if helio_proj:
+        # convert image axes back to arcsec
+        image_in_x = image_in_x * image_in.sunpy_meta['rsun_obs']
+        image_in_y = image_in_y * image_in.sunpy_meta['rsun_obs']
+
+    # start a Pool of processes
+    p_pool = mp.get_context("fork").Pool(nprocs)
+    total_threads = nprocs*tpp
+    n_coords = map_x_vec.__len__()
+    coords_per_thread = int(n_coords/total_threads)
+    # chunk CR coordinate vec and launch threads
+    proc_list = [0, ]*total_threads
+    for ii in range(total_threads):
+        min_index = ii*coords_per_thread
+        if ii == (total_threads-1):
+            max_index = n_coords
+        else:
+            max_index = (ii+1)*coords_per_thread
+        # launch coordinate conversions
+        proc_list[ii] = p_pool.apply_async(coord_interp_chunk,
+                                           (map_x_vec[min_index:max_index], map_y_vec[min_index:max_index],
+                                            interp_result_vec[min_index:max_index], image_in_x, image_in_y,
+                                            im_data, image_in.info),
+                                           dict(sunpy_meta=image_in.sunpy_meta, R0=R0, helio_proj=helio_proj))
+
+    # collect results in order (after each thread finishes)
+    for ii in range(total_threads):
+        proc_list[ii].wait()
+        proc_out = proc_list[ii].get()
+        # index into results vectors
+        min_index = ii * coords_per_thread
+        if ii == (total_threads - 1):
+            max_index = n_coords
+        else:
+            max_index = (ii + 1) * coords_per_thread
+        interp_result_vec[min_index:max_index] = proc_out[0]
+        mu_vec[min_index:max_index] = proc_out[1]
+
+    # close the pool of processes
+    p_pool.close()
+
+    # reformat result to matrix form
+    interp_result = interp_result_vec.reshape((map_nycoord, map_nxcoord), order="C")
+    mu_mat = mu_vec.reshape((map_nycoord, map_nxcoord), order="C")
+
+    out_obj = psi_dt.InterpResult(interp_result, map_x, map_y, mu_mat=mu_mat)
+
+    return out_obj
+
+
+def coord_interp_chunk(map_x_vec, map_y_vec, interp_result_vec, image_in_x, image_in_y, im_data,
+                       im_info, sunpy_meta=None, R0=1., helio_proj=True):
+    # determine if image is solar-north-up, or needs an additional rotation
+    if sunpy_meta is not None:
+        if "crota2" in sunpy_meta.keys():
+            image_crota2 = sunpy_meta['crota2']
+        else:
+            image_crota2 = 0.
+    else:
+        image_crota2 = 0.
+
+    # convert map grid variables to image space
+    if helio_proj:
+        D_sun_obs = sunpy_meta['dsun_obs']
+        r_sun_ref = sunpy_meta['rsun_ref']
+        image_x, image_y, image_z, image_theta, image_phi, alpha = map_grid_to_helioprojective(
+            map_x_vec, map_y_vec, R0=R0,
+            obsv_lon=im_info['cr_lon'],
+            obsv_lat=im_info['cr_lat'],
+            image_crota2=image_crota2,
+            D_sun_obs=D_sun_obs,
+            r_sun_ref=r_sun_ref)
+        # convert CR axes from radians to arcsec
+        image_x = image_x * 206264.806
+        image_y = image_y * 206264.806
+    else:
+        image_x, image_y, image_z, image_theta, image_phi = map_grid_to_image(map_x_vec, map_y_vec, R0=R0,
+                                                                              obsv_lon=im_info['cr_lon'],
+                                                                              obsv_lat=im_info['cr_lat'],
+                                                                              image_crota2=image_crota2)
+    # only interpolate points on the visible portion of the sphere
+    if helio_proj:
+        sin_alpha = r_sun_ref / D_sun_obs
+        # min z (apparent semi-radius) is R*sin_alpha, then divided by R to convert from meters to solar-radii
+        min_z = sin_alpha
+        interp_index = image_z > min_z
+    else:
+        interp_index = image_z > 0
+
+    # interpolate on-image values
+    interp_vec = interpolate2D_regular2irregular(image_in_x, image_in_y, im_data, image_x[interp_index],
+                                                 image_y[interp_index])
+    # index on-image values back into results vec
+    interp_result_vec[interp_index] = interp_vec
+
+    if helio_proj:
+        # mu becomes slightly more complicated:
+        # mu = cos(observer-to-radial angle)
+        mu_vec = np.cos(image_theta + alpha)
+    else:
+        # mu = cos(center-to-radial angle)
+        mu_vec = np.cos(image_theta)
+
+    return interp_result_vec, mu_vec
 
 
 def map_to_image_rot_mat(obsv_lon, obsv_lat):
