@@ -1,4 +1,6 @@
 
+# Read the file tree from designated directory and write a csv summary for HIPFT.
+
 import pandas as pd
 import datetime
 import os
@@ -7,16 +9,18 @@ import oftpy.utilities.file_io.io_helpers as io_helpers
 
 # ---- Inputs -----------------------------
 # data-file dirs
-raw_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_raw"
-# map_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_map"
-# hipft_text_path = "/Volumes/terminus_ext/HMI_M720s"
-map_data_dir = "/Volumes/terminus_ext/HMI_ron/hmi_map"
-hipft_text_path = "/Volumes/terminus_ext/HMI_ron"
+# raw_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_raw"
+map_data_dir = "/Volumes/extdata3/oft/processed_maps/hmi_hipft"
+hipft_text_path = "/Volumes/extdata3/oft/processed_maps/hmi_hipft/index_files"
+# map_data_dir = "/Volumes/terminus_ext/HMI_ron/hmi_map"
+# hipft_text_path = "/Volumes/terminus_ext/HMI_ron"
 
 
 # select all maps between these dates
 min_datetime_thresh = datetime.datetime(2010, 1, 1, 0, 0, 0)
-max_datetime_thresh = datetime.datetime(2016, 2, 1, 0, 0, 0)
+max_datetime_thresh = datetime.datetime(2023, 1, 1, 0, 0, 0)
+# or ignore date range and include all available files
+all_flag = True
 
 # ---- Main -------------------------------
 # get a list of raw filenames
@@ -25,10 +29,10 @@ available_maps = io_helpers.read_db_dir(map_data_dir)
 
 # save summary dataframe to file
 write_df = available_maps.rename(columns=dict(date='hmi_datetime', rel_path='map_path'))
-# write_df = write_df.loc[write_df.hmi_datetime < min_datetime_thresh, :]
-keep_ind = (write_df.hmi_datetime >= min_datetime_thresh) & \
-           (write_df.hmi_datetime <= max_datetime_thresh)
-write_df = write_df.loc[keep_ind, :]
+if not all_flag:
+    keep_ind = (write_df.hmi_datetime >= min_datetime_thresh) & \
+               (write_df.hmi_datetime <= max_datetime_thresh)
+    write_df = write_df.loc[keep_ind, :]
 write_df.loc[:, 'target_datetime'] = write_df.hmi_datetime.dt.round('H')
 # re-order columns and reset index
 write_df = write_df.loc[:, ['target_datetime', 'hmi_datetime', 'map_path']]
@@ -46,7 +50,10 @@ unix_time_df = pd.DataFrame(dict(target_unix_days=target_unix_days, hmi_unix_day
 write_df = pd.concat([unix_time_df, write_df], axis=1)
 
 # generate a filename
-map_index_filename = "maps-up-to_" + write_df.hmi_datetime.max().strftime("%Y-%m-%d") + ".csv"
+if all_flag:
+    map_index_filename = "all-files.csv"
+else:
+    map_index_filename = "maps-up-to_" + write_df.hmi_datetime.max().strftime("%Y-%m-%d") + ".csv"
 
 # write to csv
 write_df.to_csv(os.path.join(hipft_text_path, map_index_filename), index=False,

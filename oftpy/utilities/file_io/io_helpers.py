@@ -354,6 +354,10 @@ def read_db_dir(dir_path):
     for root, dirs, files in all_paths:
         if len(files) == 0:
             continue
+        # check that this is not an 'index_files' directory
+        if os.path.basename(root) == "index_files":
+            # if so, these are not map/image files. Skip
+            continue
         # first check for and remove '.DS_Store'
         valid_files = [x for x in files if x != ".DS_Store"]
         if len(valid_files) > 0:
@@ -376,3 +380,26 @@ def read_db_dir(dir_path):
 
     return out_df
 
+
+def gen_hipft_index(dir_path):
+    available_maps = read_db_dir(dir_path)
+
+    # update column headers and add linux days
+    write_df = available_maps.rename(columns=dict(date='hmi_datetime', rel_path='map_path'))
+    write_df.loc[:, 'target_datetime'] = write_df.hmi_datetime.dt.round('H')
+    # re-order columns and reset index
+    write_df = write_df.loc[:, ['target_datetime', 'hmi_datetime', 'map_path']]
+    write_df.reset_index(drop=True, inplace=True)
+
+    # add fractional days since unix-epoch
+    target_datetime = write_df.target_datetime.dt.to_pydatetime()
+    target_unix_seconds = [float(target_datetime[ii].strftime("%s")) for ii in range(len(target_datetime))]
+    target_unix_days = [x / (60 * 60 * 24) for x in target_unix_seconds]
+    hmi_datetime = write_df.hmi_datetime.dt.to_pydatetime()
+    hmi_unix_seconds = [float(hmi_datetime[ii].strftime("%s")) for ii in range(len(hmi_datetime))]
+    hmi_unix_days = [x / (60 * 60 * 24) for x in hmi_unix_seconds]
+    # add new columns to dataframe
+    unix_time_df = pd.DataFrame(dict(target_unix_days=target_unix_days, hmi_unix_days=hmi_unix_days))
+    write_df = pd.concat([unix_time_df, write_df], axis=1)
+
+    return write_df
