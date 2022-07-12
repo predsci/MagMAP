@@ -348,7 +348,11 @@ def read_db_dir(dir_path):
     A dataframe with date and relative-file path.
     """
 
+    # intitialize empty dataframe
     out_df = pd.DataFrame(columns=['date', 'rel_path'])
+    out_df['date'] = pd.to_datetime(out_df.date)
+
+    # create directory structure generator
     all_paths = os.walk(dir_path)
 
     for root, dirs, files in all_paths:
