@@ -162,8 +162,10 @@ hipft_index.to_csv(index_full_path, index=False,
 
 # p_pool.close()
 
-if print_timings:
-    n_its = available_raw.shape[0]
+n_its = available_raw.shape[0]
+if n_its == 0:
+    print("No maps to update.")
+elif print_timings:
     IOtime = IOtime/n_its
     image_proc_time = image_proc_time/n_its
     interp_time = interp_time/n_its
