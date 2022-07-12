@@ -359,7 +359,7 @@ def read_db_dir(dir_path):
             # if so, these are not map/image files. Skip
             continue
         # first check for and remove '.DS_Store'
-        valid_files = [x for x in files if x != ".DS_Store"]
+        valid_files = [x for x in files if (x != ".DS_Store") and (x != "README")]
         if len(valid_files) > 0:
             # loop through files and add to output data frame
             for filename in valid_files:
