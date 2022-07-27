@@ -41,7 +41,7 @@ def set_assim_wghts(br_map, assim_method="mu4_upton"):
                                                                py_field_name=['assim_weight', "mu"])))
     elif assim_method == "mu4_upton":
         # use mu^4 as the assimilation weight (mu <= 0.1 gets no weight)
-        br_map.assim_weight = br_map.assim_weight = np.power(br_map.mu, 4)
+        br_map.assim_weight = np.power(br_map.mu, 4)
         # give pixels mu <= 0.1 a 0 weight (and the backside of the sun)
         br_map.assim_weight[br_map.mu <= 0.1] = 0.
         # give pixels with 'no_data_val' a 0 weight

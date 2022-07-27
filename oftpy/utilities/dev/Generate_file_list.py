@@ -4,6 +4,7 @@
 import pandas as pd
 import datetime
 import os
+import astropy.time as astro_time
 
 import oftpy.utilities.file_io.io_helpers as io_helpers
 
@@ -17,8 +18,8 @@ hipft_text_path = "/Volumes/extdata3/oft/processed_maps/hmi_hipft/index_files"
 
 
 # select all maps between these dates
-min_datetime_thresh = datetime.datetime(2010, 1, 1, 0, 0, 0)
-max_datetime_thresh = datetime.datetime(2023, 1, 1, 0, 0, 0)
+min_datetime_thresh = datetime.datetime(2010, 12, 31, 23, 31, 0, tzinfo=datetime.timezone.utc)
+max_datetime_thresh = datetime.datetime(2022, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
 # or ignore date range and include all available files
 all_flag = True
 
@@ -28,32 +29,30 @@ available_maps = io_helpers.read_db_dir(map_data_dir)
 
 
 # save summary dataframe to file
-write_df = available_maps.rename(columns=dict(date='hmi_datetime', rel_path='map_path'))
+write_df = available_maps.rename(columns=dict(date='obs_datetime_utc', rel_path='map_path'))
 if not all_flag:
-    keep_ind = (write_df.hmi_datetime >= min_datetime_thresh) & \
-               (write_df.hmi_datetime <= max_datetime_thresh)
+    keep_ind = (write_df.obs_datetime_utc >= min_datetime_thresh) & \
+               (write_df.obs_datetime_utc <= max_datetime_thresh)
     write_df = write_df.loc[keep_ind, :]
-write_df.loc[:, 'target_datetime'] = write_df.hmi_datetime.dt.round('H')
+write_df.loc[:, 'target_datetime_utc'] = write_df.obs_datetime_utc.dt.round('H')
 # re-order columns and reset index
-write_df = write_df.loc[:, ['target_datetime', 'hmi_datetime', 'map_path']]
+write_df = write_df.loc[:, ['target_datetime_utc', 'obs_datetime_utc', 'map_path']]
 write_df.reset_index(drop=True, inplace=True)
 
-# add fractional days since unix-epoch
-target_datetime = write_df.target_datetime.dt.to_pydatetime()
-target_unix_seconds = [float(target_datetime[ii].strftime("%s")) for ii in range(len(target_datetime))]
-target_unix_days = [x/(60*60*24) for x in target_unix_seconds]
-hmi_datetime = write_df.hmi_datetime.dt.to_pydatetime()
-hmi_unix_seconds = [float(hmi_datetime[ii].strftime("%s")) for ii in range(len(hmi_datetime))]
-hmi_unix_days = [x/(60*60*24) for x in hmi_unix_seconds]
+# add julian-days
+obs_astro_time = astro_time.Time(write_df.obs_datetime_utc)
+obs_jdays = obs_astro_time.jd
 # add new columns to dataframe
-unix_time_df = pd.DataFrame(dict(target_unix_days=target_unix_days, hmi_unix_days=hmi_unix_days))
-write_df = pd.concat([unix_time_df, write_df], axis=1)
+jd_time_df = pd.DataFrame(dict(obs_jd=obs_jdays))
+write_df = pd.concat([jd_time_df, write_df], axis=1)
+# re-order columns
+write_df = write_df.loc[:, ['target_datetime_utc', 'obs_datetime_utc', 'obs_jd', 'map_path']]
 
 # generate a filename
 if all_flag:
     map_index_filename = "all-files.csv"
 else:
-    map_index_filename = "maps-up-to_" + write_df.hmi_datetime.max().strftime("%Y-%m-%d") + ".csv"
+    map_index_filename = "maps-up-to_" + write_df.obs_datetime_utc.max().strftime("%Y-%m-%d") + ".csv"
 
 # write to csv
 write_df.to_csv(os.path.join(hipft_text_path, map_index_filename), index=False,

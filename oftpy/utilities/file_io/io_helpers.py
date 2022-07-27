@@ -13,6 +13,7 @@ import os
 import pandas as pd
 from collections import OrderedDict
 import astropy.io.fits
+import astropy.time as astro_time
 import numpy as np
 import sunpy.coordinates.sun
 
@@ -350,7 +351,7 @@ def read_db_dir(dir_path):
 
     # intitialize empty dataframe
     out_df = pd.DataFrame(columns=['date', 'rel_path'])
-    out_df['date'] = pd.to_datetime(out_df.date)
+    out_df['date'] = pd.to_datetime(out_df.date, utc=True)
 
     # create directory structure generator
     all_paths = os.walk(dir_path)
@@ -372,7 +373,7 @@ def read_db_dir(dir_path):
                 # construct relative path
                 full_path = os.path.join(root, filename)
                 rel_path = os.path.relpath(full_path, dir_path)
-                new_row = pd.DataFrame(dict(date=[pd.to_datetime(date_str), ], rel_path=[rel_path, ]))
+                new_row = pd.DataFrame(dict(date=[pd.to_datetime(date_str, utc=True), ], rel_path=[rel_path, ]))
                 # add new row to output dataframe
                 # out_df = out_df.append(new_row)
                 out_df = pd.concat([out_df, new_row], axis=0, ignore_index=True)
@@ -386,6 +387,28 @@ def read_db_dir(dir_path):
 
 
 def gen_hipft_index(dir_path):
+    available_maps = read_db_dir(dir_path)
+
+    # save summary dataframe to file
+    write_df = available_maps.rename(columns=dict(date='obs_datetime_utc', rel_path='map_path'))
+    write_df.loc[:, 'target_datetime_utc'] = write_df.obs_datetime_utc.dt.round('H')
+    # re-order columns and reset index
+    write_df = write_df.loc[:, ['target_datetime_utc', 'obs_datetime_utc', 'map_path']]
+    write_df.reset_index(drop=True, inplace=True)
+
+    # add julian-days
+    obs_astro_time = astro_time.Time(write_df.obs_datetime_utc)
+    obs_jdays = obs_astro_time.jd
+    # add new columns to dataframe
+    jd_time_df = pd.DataFrame(dict(obs_jd=obs_jdays))
+    write_df = pd.concat([jd_time_df, write_df], axis=1)
+    # re-order columns
+    write_df = write_df.loc[:, ['target_datetime_utc', 'obs_datetime_utc', 'obs_jd', 'map_path']]
+
+    return write_df
+
+
+def gen_hipft_index_old(dir_path):
     available_maps = read_db_dir(dir_path)
 
     # update column headers and add linux days
