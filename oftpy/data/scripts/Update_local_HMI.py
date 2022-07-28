@@ -31,7 +31,7 @@ available_raw = io_helpers.read_db_dir(raw_data_dir)
 
 # define date range to search
 period_start = available_raw.date.iloc[-1].to_pydatetime()
-period_end = datetime.datetime.now()
+period_end = datetime.datetime.now(datetime.timezone.utc)
 period_range = [period_start, period_end]
 
 # define target times over download period using interval_cadence (image times in astropy Time() format)
