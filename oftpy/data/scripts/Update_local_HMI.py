@@ -8,6 +8,7 @@ import os
 import numpy as np
 import pandas as pd
 import datetime
+import pytz
 
 import oftpy.data.download.drms_helpers as drms_helpers
 import oftpy.utilities.file_io.io_helpers as io_helpers
@@ -49,7 +50,9 @@ available_hmi = hmi.query_time_interval(time_range=query_range)
 # generate DataFrame that defines synchronic target times as well as min/max limits
 match_times = pd.DataFrame({'target_time': target_times, 'hmi_time': target_times})
 # match closest available to each target time
-available_datetimes = np.array([datetime.datetime.strptime(x, "%Y.%m.%d_%H:%M:%S") for x in available_hmi.time])
+available_datetimes = np.array([
+    datetime.datetime.strptime(x, "%Y.%m.%d_%H:%M:%S").replace(tzinfo=pytz.UTC)
+    for x in available_hmi.time])
 
 for index, row in match_times.iterrows():
     time_diff = available_datetimes - row.target_time.to_pydatetime()
