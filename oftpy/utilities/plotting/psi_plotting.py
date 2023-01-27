@@ -630,9 +630,12 @@ def quality_plot_helper(map, mask_chd=False):
     return inst_list, mu_dict, color_dict
 
 
-def PlotQualityMap(map_plot, origin_image, inst_list, color_list, nfig=None, title=None, map_type=None):
+def PlotQualityMap(map_plot, origin_image, inst_list, color_list, nfig=None, title=None, map_type=None, inst_nums=None):
+
     plot = [None] * len(inst_list)
-    for inst_ind, inst in enumerate(inst_list):
+    if inst_nums is None:
+        inst_nums = inst_list
+    for inst_ind, inst in enumerate(inst_nums):
 
         # create usable data array
         use_image = np.zeros(origin_image.shape)

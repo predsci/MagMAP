@@ -320,8 +320,11 @@ def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., inte
     if hasattr(image_in, "sunpy_meta"):
         if "crota2" in image_in.sunpy_meta.keys():
             image_crota2 = image_in.sunpy_meta['crota2']
+        elif "crota" in image_in.sunpy_meta.keys():
+            image_crota2 = image_in.sunpy_meta['crota']
         else:
             image_crota2 = 0.
+
     else:
         image_crota2 = 0.
 
@@ -364,13 +367,16 @@ def interp_los_image_to_map(image_in, R0, map_x, map_y, no_data_val=-9999., inte
     image_in_y = image_in.y.copy()
     if helio_proj:
         # convert image axes back to arcsec
-        image_in_x = image_in_x*image_in.sunpy_meta['rsun_obs']
-        image_in_y = image_in_y*image_in.sunpy_meta['rsun_obs']
-        # At 1 AU, this could be well approximated as np.sqrt(image_x**2 + image_y**2).
-        # For generality, we do the full calculation. (now moved inside map_grid_to_helioprojective()
-        # alpha = np.arctan2(np.sqrt(np.cos(image_y) ** 2 * np.sin(image_x) ** 2 + np.sin(image_y) ** 2),
-        #                    np.cos(image_y) * np.cos(image_x))
-        # convert CR axes from radians to arcsec
+        if 'rsun_arc' in image_in.sunpy_meta.keys():
+            rsun_arc = image_in.sunpy_meta['rsun_arc']
+            image_in_x = image_in_x*rsun_arc
+            image_in_y = image_in_y*rsun_arc
+        else:
+            rsun_obs = image_in.sunpy_meta['rsun_obs']
+            image_in_x = image_in_x * rsun_obs
+            image_in_y = image_in_y * rsun_obs
+
+        # convert CR map axes from radians to arcsec
         image_x = image_x * 206264.806
         image_y = image_y * 206264.806
 

@@ -225,8 +225,12 @@ class LosMagneto(LosImage):
     def interp_to_map(self, R0=1.0, map_x=None, map_y=None, interp_field="Br", no_data_val=-65500.,
                       image_num=None, nprocs=1, tpp=1, p_pool=None, y_cor=False, helio_proj=False):
 
-        print("Converting " + self.sunpy_meta['telescop'] + "-" + str(self.sunpy_meta['content']) + " image from " +
-              self.sunpy_meta['date_obs'] + " to a CR map.")
+        if 'content' in self.sunpy_meta.keys():
+            print("Converting " + self.sunpy_meta['telescop'] + "-" + str(self.sunpy_meta['content']) + " image from " +
+                  self.sunpy_meta['date_obs'] + " to a CR map.")
+        else:
+            print("Converting " + self.sunpy_meta['telescop'] + " image from " +
+                  self.sunpy_meta['date-obs'] + " to a CR map.")
 
         if map_x is None and map_y is None:
             # Generate map grid based on number of image pixels horizontally within R0

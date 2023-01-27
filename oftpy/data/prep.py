@@ -334,7 +334,10 @@ def get_scales_from_fits(fits_meta):
                 Second array is y-axis of image space in solar radii.
     """
 
-    arcsec_per_radii = fits_meta['rsun_obs']
+    if 'rsun_arc' in fits_meta.keys():
+        arcsec_per_radii = fits_meta['rsun_arc']
+    else:
+        arcsec_per_radii = fits_meta['rsun_obs']
     # y-axis pars
     crpix2 = fits_meta['crpix2']
     cdelt2 = fits_meta['cdelt2']
