@@ -1,6 +1,6 @@
 """
-Specify times for HMI magnetogram download.
-Query available images and download best matches.
+Specify times for HMI magnetogram images.
+Query available images and convert to maps.
 """
 
 import os
@@ -18,18 +18,16 @@ import oftpy.utilities.plotting.psi_plotting as psi_plt
 
 # ---- Inputs -----------------------------
 # data-file dirs
-raw_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_raw"
-map_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_map"
-# raw_data_dir = "/Users/turtle/data/oft/hmi_raw"
-# map_data_dir = "/Users/turtle/data/oft/hmi_map"
+raw_data_dir = "/Volumes/extdata3/oft/raw_data/hmi_m720s"
+map_data_dir = "/Volumes/extdata3/oft/processed_maps/hmi_hipft"
 
 # select all maps between these dates
 #2016-03-23T20:58:14.90
-min_datetime_thresh = datetime.datetime(2012, 1, 14, 0, 0, 0)
-max_datetime_thresh = datetime.datetime(2012, 1, 17, 0, 0, 0)
+min_datetime_thresh = datetime.datetime(2010, 1, 1, 0, 0, 0)
+max_datetime_thresh = datetime.datetime(2023, 1, 1, 0, 0, 0)
 
-# number of processors for interpolation parallelization
-nprocs = 4
+# number of processors and threads-per-processor for interpolation parallelization
+nprocs = 1
 tpp = 5
 
 # High-res map grid specifications
@@ -37,7 +35,7 @@ map_nxcoord = 10240
 map_nycoord = 5120
 R0 = 1.
 
-# reduced map grid specifications
+# reduced (final) map grid specifications
 reduced_nxcoord = 1024
 reduced_nycoord = 512
 
@@ -99,9 +97,9 @@ for index, row in available_raw.iterrows():
     if not os.path.exists(os.path.join(map_data_dir, sub_dir)):
         os.makedirs(os.path.join(map_data_dir, sub_dir), mode=0o755)
     # for the purpose of this script, skip if file already exists
-    # if os.path.exists(os.path.join(map_data_dir, map_rel)):
-    #     print("Map file already exists. SKIPPING!")
-    #     continue
+    if os.path.exists(os.path.join(map_data_dir, map_rel)):
+        print("Map file already exists. SKIPPING!")
+        continue
     # load to LosMagneto object
     full_path = os.path.join(raw_data_dir, rel_path)
     hmi_im = psi_dtypes.read_hmi720s(full_path, make_map=False, solar_north_up=False)
@@ -120,7 +118,8 @@ for index, row in available_raw.iterrows():
     start_time = time.time()
     # interpolate to map
     hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat, interp_field="data",
-                                   nprocs=nprocs, tpp=tpp, p_pool=p_pool, y_cor=False, helio_proj=True)
+                                   nprocs=nprocs, tpp=tpp, p_pool=p_pool, no_data_val=-65500.,
+                                   y_cor=False, helio_proj=True)
     interp_time += time.time() - start_time
 
     # convert interpolated map values to Br

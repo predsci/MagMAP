@@ -17,13 +17,15 @@ import oftpy.maps.util.map_manip as map_manip
 
 # Specify a vector of query times
 period_start = datetime.datetime(year=2012, month=1, day=15, hour=0)
-period_end = datetime.datetime(year=2012, month=1, day=16, hour=0)
+period_end = datetime.datetime(year=2012, month=1, day=17, hour=0)
 # period_end = datetime.datetime(year=2012, month=1, day=2, hour=0)
 period_range = [period_start, period_end]
 
 # define image search interval cadence and width
-interval_cadence = datetime.timedelta(hours=1)
-del_interval = datetime.timedelta(minutes=20)
+# interval_cadence = datetime.timedelta(hours=1)
+# del_interval = datetime.timedelta(minutes=20)
+interval_cadence = datetime.timedelta(minutes=12)
+del_interval = datetime.timedelta(minutes=6)
 # define target times over download period using interval_cadence (image times in astropy Time() format)
 target_times = pd.date_range(start=period_start, end=period_end, freq=interval_cadence).to_pydatetime()
 query_range = [period_start-del_interval, period_end+del_interval]

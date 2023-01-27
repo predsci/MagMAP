@@ -16,14 +16,17 @@ import oftpy.maps.util.map_manip as map_manip
 # ---- Inputs -----------------------------
 
 # Specify a vector of query times
-period_start = datetime.datetime(year=2012, month=1, day=1, hour=0)
-period_end = datetime.datetime(year=2015, month=1, day=1, hour=0)
+# Specify a vector of query times
+period_start = datetime.datetime(year=2010, month=1, day=1, hour=0)
+period_end = datetime.datetime(year=2011, month=1, day=1, hour=0)
 # period_end = datetime.datetime(year=2012, month=1, day=2, hour=0)
 period_range = [period_start, period_end]
 
 # define image search interval cadence and width
-interval_cadence = datetime.timedelta(hours=1)
-del_interval = datetime.timedelta(minutes=20)
+# interval_cadence = datetime.timedelta(hours=1)
+# del_interval = datetime.timedelta(minutes=20)
+interval_cadence = datetime.timedelta(minutes=12)
+del_interval = datetime.timedelta(minutes=6)
 # define target times over download period using interval_cadence (image times in astropy Time() format)
 target_times = pd.date_range(start=period_start, end=period_end, freq=interval_cadence).to_pydatetime()
 query_range = [period_start-del_interval, period_end+del_interval]
@@ -36,8 +39,9 @@ hipft_text_filename = "hipft_input_" + period_start.strftime("%Y-%m-%dT%H_%M_%S"
 hipft_text_path = os.path.join(down_results_dir, hipft_text_filename)
 
 # data-file dirs
-raw_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_raw"
-map_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_map"
+# raw_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_raw"
+raw_data_dir = "/Volumes/extdata3/oft/raw_data/hmi_m720s"
+# map_data_dir = "/Volumes/terminus_ext/HMI_M720s/hmi_map"
 
 # High-res map grid specifications
 map_nxcoord = 10240
