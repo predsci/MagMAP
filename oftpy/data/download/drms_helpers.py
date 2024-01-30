@@ -42,9 +42,9 @@ class HMI_M720s:
     - On initialization it sets up a client that will be used to work with this data
     """
 
-    def __init__(self, verbose=False):
+    def __init__(self, series='hmi.m_720s', filters=['QUALITY=0', ], verbose=False):
 
-        self.series = 'hmi.m_720s'
+        self.series = series
 
         # initialize the drms client
         self.client = drms.Client(verbose=verbose)
@@ -60,8 +60,10 @@ class HMI_M720s:
         self.default_keys = ['T_REC', 'T_OBS', 'EXPTIME', 'CAMERA', 'QUALITY']
 
         # default filters to use for a query
-        self.default_filters = ['QUALITY=0', ]
+        self.default_filters = filters
+        # self.default_filters = ['QUALITY=0', ]
         # self.default_filters = ['CAMERA=1', 'QUALITY=0']
+        # self.default_filters = ['QUALITY=1024 or QUALITY=72704']
 
         # default segments for a query
         self.default_segments = ['magnetogram']
@@ -116,7 +118,9 @@ class HMI_M720s:
         # remove unwanted fields
         all_cols = set(drms_frame.keys())
         keep_cols = all_cols.difference(set(self.hdr_keys_to_delete))
-        drms_frame = drms_frame.loc[:, keep_cols]
+
+        # get the frame matching these keywords, apparently keep_cols must be a list now
+        drms_frame = drms_frame.loc[:, list(keep_cols)]
 
         return drms_frame
 
@@ -266,7 +270,7 @@ class HMI_M720s:
 
         if len(seg_frame) == 0:
             # No results were found for this time range. generate empty Dataframe to return
-            data_frame = pd.DataFrame(columns=('spacecraft', 'instrument', 'camera', 'filter', 'time', 'jd', 'url'))
+            data_frame = pd.DataFrame(columns=('spacecraft', 'instrument', 'camera', 'filter', 'quality', 'time', 'jd', 'url'))
             return data_frame
 
         # parse the results a bit
@@ -277,7 +281,7 @@ class HMI_M720s:
         # data_frame = io_helpers.custom_dataframe(time_strings, jds, urls, 'SDO', 'HMI')
         data_frame = pd.DataFrame(
             OrderedDict({'spacecraft': 'SDO', 'instrument': 'HMI', 'camera': key_frame.CAMERA,
-                         'filters': filter_str, 'time': time_strings, 'jd': jds, 'url': urls})
+                         'filters': filter_str, 'quality': key_frame.QUALITY, 'time': time_strings, 'jd': jds, 'url': urls})
         )
 
         # return key_frame, seg_frame

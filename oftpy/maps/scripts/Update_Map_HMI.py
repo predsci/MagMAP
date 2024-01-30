@@ -18,9 +18,22 @@ import oftpy.utilities.file_io.io_helpers as io_helpers
 import oftpy.utilities.plotting.psi_plotting as psi_plt
 
 # ---- Inputs -----------------------------
+# select the data series
+series = 'hmi.m_720s'
+# series = 'hmi.m_720s_nrt'
+
+if series == 'hmi.m_720s':
+    raw_dirname = 'hmi_m720s'
+    map_dirname = 'hmi_hipft'
+
+elif series == 'hmi.m_720s_nrt':
+    raw_dirname = 'hmi_m720s_nrt'
+    map_dirname = 'hmi_hipft_m720s_nrt'
+
 # data-file dirs
-raw_data_dir = "/Volumes/extdata3/oft/raw_data/hmi_m720s"
-map_data_dir = "/Volumes/extdata3/oft/processed_maps/hmi_hipft"
+base_dir = f'/Volumes/extdata3/oft'
+raw_data_dir = f"{base_dir}/raw_data/{raw_dirname}"
+map_data_dir = f"{base_dir}/processed_maps/{map_dirname}"
 
 # index file name
 index_file = "all-files.csv"
@@ -44,12 +57,18 @@ reduced_nycoord = 512
 # read available magnetograms filesystem
 print("\nReading filesystem from dir: " + raw_data_dir + "\n")
 available_raw = io_helpers.read_db_dir(raw_data_dir)
+if len(available_raw) == 0:
+    raise BaseException(f'Could not find any files in {raw_data_dir}')
 
 print("\nReading filesystem from dir: " + map_data_dir + "\n")
 available_map = io_helpers.read_db_dir(map_data_dir)
 
 # select all maps between these dates
-min_datetime_thresh = available_map.date.iloc[-1].to_pydatetime()
+if len(available_map) > 0:
+    min_datetime_thresh = available_map.date.iloc[-1].to_pydatetime()
+else:
+    # if no maps have been processed, take the earliest time minus 10 mins
+    min_datetime_thresh = available_raw.date.iloc[0].to_pydatetime() - datetime.timedelta(minutes=10)
 
 # select only files/maps between thresh datetimes
 keep_ind = (available_raw.date > min_datetime_thresh)
