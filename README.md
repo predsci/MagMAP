@@ -1,9 +1,7 @@
-# OFTpy: Open source Flux Transport model
+# MagMAP: Magnetic Mapping And Processing
 
-OFTpy is a python package for downloading and processing solar magnetograms.  In conjunction with
-the Fortran codebase [HipFT](https://github.com/predsci/HipFT), it forms the Open-source Flux Transport
-(OFT) package.  OFT is an open-source, GPU-enabled package that handles everything from data acquisition 
-to simulation and analysis for solar flux transport models.
+MagMAP is a python package for downloading, mapping, and processing solar magnetograms.  It is an integral component 
+of the Open-source Flux Transport [OFT](https://github.com/predsci/OFT) model.  
 
 ## Requirements
 
@@ -38,14 +36,14 @@ each data file.
 
 ### Mapping Data
 Once a local directory of HMI data exists, the script oftpy/examples/Map_HMI_dir.py
-can be used to generate maps for HipFT.  Additionally, the script 
+can be used to generate maps.  Additionally, the script 
 oftpy/maps/scripts/Update_Map_HMI.py can be used to update maps as new data comes 
 in.  The mapping process has five primary steps
 - Load the disk FITS file into a LosMagneto object
 - High resolution interpolation from disk to map coordinates
 - Reduce resolution by integration
 - Set assimilation weights for HipFT
-- Save to HipFT specification in an HDF5 file format
+- Save in an HDF5 file format
 
 ## Contact
 
