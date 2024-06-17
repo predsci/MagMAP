@@ -17,13 +17,6 @@ oftpy/settings/app_*.py
 oftpy/settings/e_key.bin
 oftpy/settings/e_cred.bin
 
-# ignore the output folders in schema_viz (except schema diagrams)
-schema_viz/mysql/output/*
-!schema_viz/mysql/output/diagrams
-schema_viz/mysql/output/diagrams/*
-!schema_viz/mysql/output/diagrams/summary
-schema_viz/sqlite/output/*
-!schema_viz/sqlite/output/diagrams
-schema_viz/sqlite/output/diagrams/*
-!schema_viz/sqlite/output/diagrams/summary
-/chmap/coronal_holes/tracking/results/
+build
+magmap.egg-info
+
