@@ -10,11 +10,14 @@
 import os
 import pandas as pd
 import shutil
+import datetime
 
 # data base directory
 root_dir = "/Volumes/extdata3/oft/processed_maps/hmi_hipft"
 # zip dir
 zip_dir = "/Volumes/extdata3/oft/processed_maps/hmi_hipft_zips"
+# start date
+start_date = datetime.datetime(2022, 10, 1, 0, 0, 0)
 
 # load index file
 all_maps = pd.read_csv("/Volumes/extdata3/oft/processed_maps/hmi_hipft/index_files/all-files.csv")
@@ -22,6 +25,10 @@ all_maps = pd.read_csv("/Volumes/extdata3/oft/processed_maps/hmi_hipft/index_fil
 all_maps.obs_datetime_utc = pd.to_datetime(all_maps.obs_datetime_utc, format='%Y-%m-%dT%H:%M:%S')
 all_maps['year'] = all_maps.obs_datetime_utc.dt.year
 all_maps['month'] = all_maps.obs_datetime_utc.dt.month
+
+# filter dates by start date
+all_maps = all_maps.loc[all_maps.obs_datetime_utc >= start_date, :]
+
 # get all year/month combinations
 all_months = all_maps.groupby(['year', 'month']).size().reset_index(name='count')
 
