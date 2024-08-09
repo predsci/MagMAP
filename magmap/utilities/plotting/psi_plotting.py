@@ -347,7 +347,8 @@ def map_movie_frame(map_plot, int_range, save_path='maps/synoptic/',
     return None
 
 
-def map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=None, map_type="EUV"):
+def map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=None, map_type="EUV",
+              standard_grid=True):
     """
     Take a list of EUV synchronic maps and generate a video.
 
@@ -374,6 +375,8 @@ def map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=None, 
     :param dpi: int
                 Dots per inch for pngs.  If set to None, an automatic estimation
                 will be done to preserve the map resolution.
+    :param standard_grid: True/False
+                          Specific to read_hmi_Mrmap_latlon_720s() and map_type='HMI_Mrmap'
     :return: None
              This routine writes PNGs to png_dir and an MP4 to movie_dir, but has
              no explicit output.
@@ -390,10 +393,10 @@ def map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=None, 
     elif map_type == "HMI_hipft":
         cur_map = psi_dt.read_hipft_map(map_path)
     elif map_type == "HMI_Mrmap":
-        cur_map = psi_dt.read_hmi_Mrmap_latlon_720s(map_path)
+        cur_map = psi_dt.read_hmi_Mrmap_latlon_720s(map_path, standard_grid=standard_grid)
     else:
         sys.exit("magmap.utilities.plotting.psi_plotting.map_movie() \n" +
-                 "'map_type' only supports 'EUV' or 'HMI_hipft' at present.")
+                 "'map_type' only supports 'EUV', 'HMI_hipft', or 'HMI_Mrmap' at present.")
 
     # generate title (timestamp)
     title = row.date_mean.strftime("%Y/%m/%d, %H:%M:%S")
@@ -431,7 +434,7 @@ def map_movie(map_info, png_dir, movie_path, map_dir, int_range, fps, dpi=None, 
         elif map_type == "HMI_hipft":
             cur_map = psi_dt.read_hipft_map(map_path)
         elif map_type == "HMI_Mrmap":
-            cur_map = psi_dt.read_hmi_Mrmap_latlon_720s(map_path)
+            cur_map = psi_dt.read_hmi_Mrmap_latlon_720s(map_path, standard_grid=standard_grid)
         # generate title (timestamp)
         title = row.date_mean.strftime("%Y/%m/%d, %H:%M:%S")
         # generate filename
