@@ -43,7 +43,7 @@ nprocs = 1
 tpp = 5
 print_timings = True
 
-# High-res map grid specifications
+# High-res map grid specifications (interpolation grid)
 map_nxcoord = 10240
 map_nycoord = 5120
 R0 = 1.
@@ -92,7 +92,7 @@ y_interp[-1] = y_interp[-1] - dy/4
 # interp expects sin(lat)
 sin_lat = np.sin(y_interp)
 
-# setup reduced-map grid
+# setup reduced-map grid (for saving to file)
 reduced_x = np.linspace(x_range[0], x_range[1], reduced_nxcoord)
 reduced_y = np.linspace(y_range[0], y_range[1], reduced_nycoord)
 # interp expects sin(lat)
