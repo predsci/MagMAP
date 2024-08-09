@@ -1038,7 +1038,7 @@ def read_hipft_map(h5_file):
     return magneto_map
 
 
-def read_hmi_Mrmap_latlon_720s(fits_file, no_data_val=-65500.):
+def read_hmi_Mrmap_latlon_720s(fits_file, no_data_val=-65500., standard_grid=True):
     """
     Method for reading an HMI_Mrmap_latlon_720s FITS file to a MagnetoMap class.
     fits_file: path to a raw fits file.
@@ -1053,27 +1053,78 @@ def read_hmi_Mrmap_latlon_720s(fits_file, no_data_val=-65500.):
 
     # initiate full-map
     data = np.full([len(y), len(x)*2], fill_value=no_data_val)
-    full_map_x = np.linspace(0.1, 359.9, 1800, dtype=x.dtype)
-    full_map_y = np.linspace(-89.9, 89.9, 900, dtype=y.dtype)
+    if standard_grid:
+        full_map_x = np.linspace(0.1, 359.9, 1800, dtype=x.dtype)
+        full_map_y = np.linspace(-89.9, 89.9, 900, dtype=y.dtype)
+    else:
+        # find the longitudinal shift from a standard grid
+        decim = np.mod(x[0], 1.)
+        tenth = np.round(decim*10)
+        if np.mod(tenth, 2) == 0:
+            # if closest decimal tenth is even, determine which neighbor odd is closer
+            posneg = decim - tenth/10
+            if posneg >= 0.:
+                dec_base = tenth/10 + 0.1
+            else:
+                dec_base = tenth/10 - 0.1
+        else:
+            dec_base = tenth/10
+        xshift = decim - dec_base
+        full_map_x = np.linspace(0.1, 359.9, 1800, dtype=x.dtype) + xshift
+
+        # find the latitudinal shift from a standard grid
+        decim = np.mod(y[0], 1.)
+        tenth = np.round(decim * 10)
+        if np.mod(tenth, 2) == 0:
+            # if closest decimal tenth is even, determine which neighbor odd is closer
+            posneg = decim - tenth / 10
+            if posneg >= 0.:
+                dec_base = tenth / 10 + 0.1
+            else:
+                dec_base = tenth / 10 - 0.1
+        else:
+            dec_base = tenth / 10
+        yshift = decim - dec_base
+        full_map_y = np.linspace(-89.9, 89.9, 900, dtype=y.dtype) + yshift
+
     full_map_x_rad = full_map_x * np.pi/180
     full_map_y_rad = full_map_y * np.pi/180
 
     # check for CR lon that overlaps periodic boundary
-    x_eps = .00001
-    left_index = np.argwhere(np.abs(x-360.1) < x_eps)
-    right_index = np.argwhere(np.abs(x + 0.1) < x_eps)
-
-    # index columns of map_raw.data into the full map 'data'
-    if not len(left_index) == 0:
-        # divide input map across left periodic boundary
-        per_index = left_index[0][0]
-        periodic = True
-    elif not len(right_index) == 0:
-        # divide input map across right periodic boundary
-        per_index = right_index[0][0] + 1
-        periodic = True
+    if standard_grid:
+        x_eps = .00001
+        left_index = np.argwhere(np.abs(x-360.1) < x_eps)
+        right_index = np.argwhere(np.abs(x + 0.1) < x_eps)
+        # index columns of map_raw.data into the full map 'data'
+        if not len(left_index) == 0:
+            # divide input map across left periodic boundary
+            per_index = left_index[0][0]
+            periodic = True
+        elif not len(right_index) == 0:
+            # divide input map across right periodic boundary
+            per_index = right_index[0][0] + 1
+            periodic = True
+        else:
+            periodic = False
     else:
-        periodic = False
+        left_index = np.argmin(np.abs(x-360))
+        if np.abs(x[left_index] - 360) > 0.2:
+            right_index = np.argmin(np.abs(x))
+            if np.abs(x[right_index]) > 0.2:
+                periodic = False
+            else:
+                periodic = True
+                if x[right_index] < 0.:
+                    per_index = right_index
+                else:
+                    per_index = right_index - 1
+        else:
+            periodic = True
+            if (x[left_index] - 360) >= 0.:
+                per_index = left_index
+            else:
+                per_index = left_index + 1
+
 
     if periodic:
         left_fill = len(x) - per_index
