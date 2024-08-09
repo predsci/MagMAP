@@ -300,6 +300,28 @@ plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
 plt.savefig(png_dir + "/los2br_div.png", dpi=600)
 plt.close(1)
 
+# --- re-plot on a sinlat axis ------
+theta_vec2 = np.linspace(start=-np.pi/2, stop=np.pi/2, num=200)
+deg_vec2 = theta_vec2*180/np.pi
+mu_vec2 = np.cos(theta_vec2)
+los2br_2 = 1/mu_vec2
+
+sin_vec2 = np.sin(theta_vec2)
+sin_vec_cor2 = (r_sun_obs/cdelt/im_pix_width) * sin_vec2
+los2br_cor_2 = 1/np.sqrt(1 - sin_vec_cor2**2)
+# plot losbr/los2br
+plt.figure(1)
+plt.plot(sin_vec2[6:-6], los2br_2[6:-6]/los2br_cor_2[6:-6])
+# plt.yscale("log")
+plt.title("LOS-to-Br: PSI v Mrmap")
+plt.xlabel("Sine Lat")
+plt.ylabel("PSI/Mrmap")
+plt.ylim((-2, 4))
+plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
+plt.savefig(png_dir + "/los2br_div_sinlat.png", dpi=600)
+plt.close(1)
+
+
 # plot losbr - los2br
 plt.figure(1)
 plt.plot(deg_vec[:-11], los2br[:-11] - los2br_cor[:-11])
@@ -408,3 +430,62 @@ plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
 
 plt.savefig(png_dir + "/PSI-div-Yang_v_radius.png", dpi=600)
 plt.close(0)
+
+
+# determine PSI/MRmap ratio for each Theta value
+psi_data = np.copy(best_shift_map.data)
+ratio_data = np.abs(psi_data/yang_data)
+
+ignore_index = (np.isnan(ratio_data)) | (ratio_data > 1000)
+row_means = np.mean(ratio_data, axis=1, where=~ignore_index)
+row_means2 = np.mean(ratio_data, axis=1)
+
+theta_lat = mr_map.y[1:-1]
+im_shifted_theta = theta_lat - CR_lat*np.pi/180
+use_index = (im_shifted_theta >= -np.pi/2) & (im_shifted_theta <= np.pi/2)
+im_sine_lat = np.sin(im_shifted_theta)
+
+# plot the ratio between methods as a function of sine_lat
+plt.figure(0)
+plt.plot(im_sine_lat[use_index], row_means[use_index])
+plt.xlabel("Sine Lat")
+plt.ylabel("Mean Abs (PSI/Yang)")
+plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
+
+plt.savefig(png_dir + "/PSI-div-Yang_v_radius.png", dpi=600)
+plt.close(0)
+
+# determine PSI/MRmap ratio for each Theta value (theoretical)
+yang_mu = np.copy(best_shift_map.mu)
+yang_im_radius = np.sqrt(1 - yang_mu**2)
+radius_per_half_image = r_sun_obs/cdelt/im_pix_width
+im_radius = yang_im_radius/radius_per_half_image
+psi_mu = np.sqrt(1 - im_radius**2)
+
+multi_factor = yang_mu/psi_mu
+
+psi_index = best_shift_map.data > best_shift_map.no_data_val
+yang_index = mr_map.data[1:-1, 1:-1] > mr_map.no_data_val
+psiBr_index = best_shift_psi.data != best_shift_psi.no_data_val
+data_index = psi_index & psiBr_index & yang_index
+
+mu_limit = 0.1
+keep_index = (psi_mu > mu_limit) & data_index
+row_means = np.mean(multi_factor, axis=1, where=keep_index)
+
+theta_lat = mr_map.y[1:-1]
+im_shifted_theta = theta_lat - CR_lat*np.pi/180
+use_index = (im_shifted_theta >= -np.pi/2) & (im_shifted_theta <= np.pi/2)
+im_sine_lat = np.sin(im_shifted_theta)
+
+# plot the ratio between methods as a function of sine_lat
+plt.figure(0)
+plt.plot(im_sine_lat[use_index], row_means[use_index])
+plt.ylim((-2, 4))
+plt.xlabel("Sine Lat")
+plt.ylabel("Mean (PSI/Yang)")
+plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
+
+plt.savefig(png_dir + "/PSI-div-Yang_v_sinlat_" + str(mu_limit) + ".png", dpi=600)
+plt.close(0)
+
