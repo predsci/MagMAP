@@ -58,7 +58,8 @@ def map_grid_to_image(map_x, map_y, R0=1.0, obsv_lon=0.0, obsv_lat=0.0, image_cr
     """
     Given a set of xy coordinate pairs, in map-space (x:horizontal phi axis, y:vertical sin(theta) axis, radius:R0),
     rotate and change variables to image space (x:horizontal, y:vertical, z:coming out of image, theta=0 at center of
-    image, phi=0 at x=R0)
+    image, phi=0 at x=R0).  This routine assumes the observer is 'far'-meaning that fore-shortening and apparent radius
+    are ignored.
     :param map_x: numpy 1D array of map pixel x-locations [0, 2pi]
     :param map_y: numpy 1D array of map pixel y-locations [-1, 1]
     :param R0: Image radius in solar radii
@@ -167,7 +168,8 @@ def map_grid_to_helioprojective(map_x, map_y, R0=1.0, obsv_lon=0.0, obsv_lat=0.0
 def image_grid_to_CR(image_x, image_y, R0=1.0, obsv_lat=0, obsv_lon=0, get_mu=False, outside_map_val=-9999.,
                      crota2=0.):
     """
-    Given vector coordinate pairs in solar radii units and the observer angles, transform to map coords.
+    Given vector coordinate pairs in solar radii units and the observer angles, transform to map coords.  This routine
+    assumes the observer is 'far'-meaning that fore-shortening and apparent radius are ignored.
     :param image_x: vector of x coordinates
     :param image_y: vector of y coordinates
     :param R0: Assumed radius in solar radii.
@@ -579,8 +581,8 @@ def snu_to_image_rot_mat(crota2):
     return rot_mat
 
 
-def interp_los_image_to_map_yang(image_in, R0, map_x, map_y, no_data_val=-9999., interp_field="data",
-                            nprocs=1, tpp=1, p_pool=None):
+def interp_los_image_to_map_jitter_test(image_in, R0, map_x, map_y, no_data_val=-9999., interp_field="data",
+                                        nprocs=1, tpp=1, p_pool=None):
     map_nxcoord = len(map_x)
     map_nycoord = len(map_y)
 
@@ -611,7 +613,7 @@ def interp_los_image_to_map_yang(image_in, R0, map_x, map_y, no_data_val=-9999.,
     # only interpolate points on the front half of the sphere
     interp_index = image_z > 0
 
-    # implement the corrections in perform_mapping() from Yang's code
+    # implement the corrections in perform_mapping() from jitter test's code
     # http://jsoc.stanford.edu/cvs/JSOC/proj/mag/synop/apps/maprojbrfromblos.c?only_with_tag=Ver_LATEST
     sin_asd = 0.004660
     cos_asd = 0.99998914
@@ -651,67 +653,5 @@ def interp_los_image_to_map_yang(image_in, R0, map_x, map_y, no_data_val=-9999.,
 
     return out_obj
 
-
-# def interp_los_image_to_map_yang(image_in, R0, map_x, map_y, no_data_val=-9999., interp_field="data",
-#                             nprocs=1, tpp=1, p_pool=None):
-#     map_nxcoord = len(map_x)
-#     map_nycoord = len(map_y)
-#
-#     # initialize grid to receive interpolation with values of NaN
-#     interp_result = np.full((map_nycoord, map_nxcoord), no_data_val, dtype='<f4')
-#
-#     # convert 1D map axis to full list of coordinates
-#     mat_x, mat_y = np.meshgrid(map_x, map_y)
-#     # convert matrix of coords to vector of coords (explicitly select row-major vectorizing)
-#     map_x_vec = mat_x.flatten(order="C")
-#     map_y_vec = mat_y.flatten(order="C")
-#     interp_result_vec = interp_result.flatten(order="C")
-#     # determine if image is solar-north-up, or needs an additional rotation
-#     if hasattr(image_in, "sunpy_meta"):
-#         if "crota2" in image_in.sunpy_meta.keys():
-#             image_crota2 = image_in.sunpy_meta['crota2']
-#         else:
-#             image_crota2 = 0.
-#     else:
-#         image_crota2 = 0.
-#     # convert map grid variables to image space
-#     image_x, image_y, image_z, image_theta, image_phi = map_grid_to_image(map_x_vec, map_y_vec, R0=R0,
-#                                                                           obsv_lon=image_in.info['cr_lon'],
-#                                                                           obsv_lat=image_in.info['cr_lat'],
-#                                                                           image_crota2=image_crota2)
-#     mu_vec = np.cos(image_theta)
-#     # only interpolate points on the front half of the sphere
-#     interp_index = image_z > 0
-#
-#     # implement the corrections in perform_mapping() from Yang's code
-#     # http://jsoc.stanford.edu/cvs/JSOC/proj/mag/synop/apps/maprojbrfromblos.c?only_with_tag=Ver_LATEST
-#     sin_asd = 0.004660
-#     cos_asd = 0.99998914
-#     # calc radius correction factor
-#     r_cor = 1.*cos_asd/(1. - mu_vec*sin_asd)
-#     # apply to CR points in image plane
-#     image_x_cor = image_x*r_cor
-#     image_y_cor = image_y*r_cor
-#
-#     # interpolate the specified attribute
-#     im_data = getattr(image_in, interp_field)
-#
-#     # interpolate
-#     if nprocs <= 1:
-#         interp_vec = interpolate2D_regular2irregular(image_in.x, image_in.y, im_data, image_x_cor[interp_index],
-#                                                      image_y_cor[interp_index])
-#     else:
-#         interp_vec = interpolate2D_regular2irregular_parallel(image_in.x, image_in.y, im_data, image_x_cor[interp_index],
-#                                                               image_y_cor[interp_index], nprocs=nprocs, tpp=tpp,
-#                                                               p=p_pool)
-#     interp_result_vec[interp_index] = interp_vec
-#     # reformat result to matrix form
-#     interp_result = interp_result_vec.reshape((map_nycoord, map_nxcoord), order="C")
-#
-#     mu_mat = mu_vec.reshape((map_nycoord, map_nxcoord), order="C")
-#
-#     out_obj = psi_dt.InterpResult(interp_result, map_x, map_y, mu_mat=mu_mat)
-#
-#     return out_obj
 
 

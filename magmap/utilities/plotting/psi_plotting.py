@@ -488,67 +488,6 @@ def Plot2D_Data(data, nfig=None, xlabel=None, ylabel=None, title=None):
     return None
 
 
-def Plot_LBCC_Hists(plot_hist, date_obs, instrument, intensity_bin_edges, mu_bin_edges, figure, plot_index):
-    """
-    function to plot 2D histograms used in LBCC calculation
-    @param plot_hist:
-    @param date_obs:
-    @param instrument:
-    @param intensity_bin_edges:
-    @param mu_bin_edges:
-    @param figure:
-    @param plot_index:
-    @return:
-    """
-    # simple plot of raw histogram
-    plt.figure(figure + instrument + " " + str(100 + plot_index))
-    plt.imshow(plot_hist, aspect="auto", interpolation='nearest', origin='lower',
-               extent=[intensity_bin_edges[0], intensity_bin_edges[-2] + 1., mu_bin_edges[0],
-                       mu_bin_edges[-1]])
-    plt.xlabel("Pixel log10 intensity")
-    plt.ylabel("mu")
-    plt.title("Raw 2D Histogram Data: \n" + "Instrument: " + instrument + " \n " + str(date_obs))
-
-    # # Normalize each mu bin
-    norm_hist = np.full(plot_hist.shape, 0.)
-    row_sums = plot_hist.sum(axis=1, keepdims=True)
-    # but do not divide by zero
-    zero_row_index = np.where(row_sums != 0)
-    norm_hist[zero_row_index[0]] = plot_hist[zero_row_index[0]] / row_sums[zero_row_index[0]]
-
-    # # simple plot of normed histogram
-    plt.figure(figure + instrument + " " + str(200 + plot_index))
-    plt.imshow(norm_hist, aspect="auto", interpolation='nearest', origin='lower',
-               extent=[intensity_bin_edges[0], intensity_bin_edges[-1], mu_bin_edges[0],
-                       mu_bin_edges[-1]])
-    plt.xlabel("Pixel log10 intensity")
-    plt.ylabel("mu")
-    plt.title(
-        "2D Histogram Data Normalized by mu Bin: \n" + "Instrument: " + instrument + " \n " + str(date_obs))
-    return None
-
-
-def Plot1d_Hist(norm_hist, instrument, inst_index, intensity_bin_edges, color_list, linestyle_list, figure,
-                xlabel, ylabel, title, save=None):
-    """
-    plot 1D IIT Histogram
-    @return:
-    """
-    # plot original
-    plt.figure(figure)
-    plt.plot(intensity_bin_edges[:-1], norm_hist, color=color_list[inst_index],
-             linestyle=linestyle_list[inst_index], label=instrument)
-    plt.xlim(0, np.max(intensity_bin_edges))
-    plt.ylim(0, 0.050)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.show()
-    plt.legend()
-    if save is not None:
-        plt.savefig('maps/iit/' + save)
-    return None
-
 
 def quality_plot_helper(map, mask_chd=False):
     """

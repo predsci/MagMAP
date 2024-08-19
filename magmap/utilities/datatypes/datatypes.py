@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import sunpy.map
 import sunpy.util.metadata
-from magmap.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR, interp_los_image_to_map_yang, \
+from magmap.utilities.coord_manip import interp_los_image_to_map, image_grid_to_CR, interp_los_image_to_map_jitter_test, \
     interp_los_image_to_map_par
 from magmap.settings.info import DTypes
 
@@ -112,9 +112,9 @@ class LosImage:
 
         # Do interpolation
         if y_cor:
-            interp_result = interp_los_image_to_map_yang(self, R0, map_x, map_y, no_data_val=no_data_val,
-                                                         interp_field=interp_field, nprocs=nprocs, tpp=tpp,
-                                                         p_pool=p_pool)
+            interp_result = interp_los_image_to_map_jitter_test(self, R0, map_x, map_y, no_data_val=no_data_val,
+                                                                interp_field=interp_field, nprocs=nprocs, tpp=tpp,
+                                                                p_pool=p_pool)
         else:
             if nprocs > 1:
                 interp_result = interp_los_image_to_map_par(self, R0, map_x, map_y, no_data_val=no_data_val,
@@ -1185,24 +1185,6 @@ def read_hmi_Mrmap_latlon_720s(fits_file, no_data_val=-65500., standard_grid=Tru
 
     return br_map
 
-
-def init_df_from_declarative_base(base_object):
-    """
-    Takes in an SQLAlchemy declarative_base() table definition object.  Returns an empty pandas
-    DataFrame with the same column names.
-    :param base_object: SQLAlchemy declarative_base() table definition object
-    :return: empty pandas DataFrame with same column names as the table
-    """
-
-    column_names = []
-    for table_column in base_object.__table__.columns:
-        column_names.append(table_column.key)
-
-    out_df = pd.DataFrame(data=None, columns=column_names)
-
-    return out_df
-
-
 class InterpResult:
     """
     Class to hold the standard output from interpolating an image to
@@ -1219,132 +1201,3 @@ class InterpResult:
         self.map_lon = map_lon
 
 
-class Hist:
-    """
-    Class that holds histogram information
-    """
-
-    def __init__(self, image_id, meth_id, date_obs, instrument, wavelength, mu_bin_edges=None, intensity_bin_edges=None,
-                 lat_band=[-np.pi / 64., np.pi / 64.], hist=None):
-
-        self.image_id = image_id
-        self.meth_id = meth_id
-        self.date_obs = date_obs
-        self.instrument = instrument
-        self.wavelength = wavelength
-        self.lat_band = float(np.max(lat_band))
-
-        if mu_bin_edges is not None:
-            self.n_mu_bins = len(mu_bin_edges) - 1
-            self.mu_bin_edges = mu_bin_edges
-        else:
-            self.n_mu_bins = None
-            self.mu_bin_edges = None
-        if intensity_bin_edges is not None:
-            self.n_intensity_bins = len(intensity_bin_edges) - 1
-            self.intensity_bin_edges = intensity_bin_edges
-        else:
-            self.n_intensity_bins = None
-            self.intensity_bin_edges = None
-        if hist is not None:
-            self.hist = hist
-
-    def get_data(self):
-        date_format = "%Y-%m-%dT%H:%M:%S.%f"
-        hist_data = {'image_id': self.image_id,
-                     'date_obs': datetime.datetime.strptime(self.info['date_string'], date_format),
-                     'wavelength': self.info['wavelength'],
-                     'instrument': self.info['instrument'], 'n_mu_bins': self.n_mu_bins,
-                     'n_intensity_bins': self.n_intensity_bins, 'lat_band': self.lat_band,
-                     'mu_bin_edges': self.mu_bin_edges, 'intensity_bin_edges': self.intensity_bin_edges,
-                     'all_hists': self.mu_hist}
-        return hist_data
-
-    def write_to_pickle(self, path_for_hist, year, time_period, instrument, hist):
-        file_path = path_for_hist + str(year) + "_" + time_period + '_' + str(
-            len(self.mu_bin_edges)) + '_' + instrument + '.pkl'
-        print('\nSaving histograms to ' + file_path + '\n')
-        f = open(file_path, 'wb')
-        pickle.dump(hist.get_data, f)
-        f.close()
-
-
-def create_lbcc_hist(h5_file, image_id, meth_id, mu_bin_edges, intensity_bin_edges, lat_band, mu_hist):
-    # read the image and metadata
-    x, y, z, data, chd_meta, sunpy_meta = psihdf.rdh5_meta(h5_file)
-    # create the structure
-    date_format = "%Y-%m-%dT%H:%M:%S.%f"
-    # lat band float
-    lat_band_float = float(np.max(lat_band))
-    hist_out = Hist(image_id, meth_id, datetime.datetime.strptime(chd_meta['date_string'], date_format),
-                    chd_meta['instrument'], chd_meta['wavelength'], mu_bin_edges,
-                    intensity_bin_edges, lat_band_float, hist=mu_hist)
-    return hist_out
-
-
-def create_iit_hist(lbcc_image, meth_id, lat_band, iit_hist):
-    """
-    function to create IIT type histogram
-    """
-    # definitions
-    image_id = lbcc_image.data_id
-    date_obs = lbcc_image.date_obs
-    instrument = lbcc_image.instrument
-    wavelength = lbcc_image.wavelength
-    intensity_bin_edges = lbcc_image.intensity_bin_edges
-    lat_band_float = float(np.max(lat_band))
-
-    # create structure
-    iit_hist = Hist(image_id=image_id, meth_id=meth_id, date_obs=date_obs, instrument=instrument, wavelength=wavelength,
-                    mu_bin_edges=None, intensity_bin_edges=intensity_bin_edges, lat_band=lat_band_float, hist=iit_hist)
-    return iit_hist
-
-
-def hist_to_binary(hist):
-    """
-    convert arrays to correct binary format
-    used for adding histogram to database
-
-    :param hist: LBCCHist histogram object
-    :return: binary data types for array
-    """
-
-    if hist.intensity_bin_edges is not None:
-        intensity_bin_edges = hist.intensity_bin_edges.tobytes()
-    else:
-        intensity_bin_edges = None
-    if hist.mu_bin_edges is not None:
-        mu_bin_edges = hist.mu_bin_edges.tobytes()
-    else:
-        mu_bin_edges = None
-    hist = hist.hist.tobytes()
-
-    return intensity_bin_edges, mu_bin_edges, hist
-
-
-def binary_to_hist(hist_binary, n_mu_bins, n_intensity_bins):
-    # generate histogram for time window
-    if n_mu_bins is not None:
-        for index, row in hist_binary.iterrows():
-            mu_bin_array = np.frombuffer(row.mu_bin_edges, dtype=np.float)
-            intensity_bin_array = np.frombuffer(row.intensity_bin_edges, dtype=np.float)
-        full_hist = np.full((n_mu_bins, n_intensity_bins, hist_binary.__len__()), 0, dtype=np.int64)
-        hist_list = hist_binary['hist']
-
-        for index in range(hist_list.size):
-            buffer_hist = np.frombuffer(hist_list[index])
-            hist = np.ndarray(shape=(n_mu_bins, n_intensity_bins), buffer=buffer_hist)
-            full_hist[:, :, index] = hist
-    else:
-        for index, row in hist_binary.iterrows():
-            mu_bin_array = None
-            intensity_bin_array = np.frombuffer(row.intensity_bin_edges, dtype=np.float)
-        full_hist = np.full((n_intensity_bins, hist_binary.__len__()), 0, dtype=np.int64)
-        hist_list = hist_binary['hist']
-
-        for index in range(hist_list.size):
-            buffer_hist = np.frombuffer(hist_list[index], dtype=np.int)
-            hist = np.ndarray(shape=n_intensity_bins, dtype=np.int, buffer=buffer_hist)
-            full_hist[:, index] = hist
-
-    return mu_bin_array, intensity_bin_array, full_hist
