@@ -5,9 +5,6 @@ import h5py
 import pandas as pd
 from astropy.time import Time, TimeDelta
 
-from magmap.settings.app import App
-
-
 def download_lmsal_index(file_write):
 
     # specify index url
@@ -22,11 +19,8 @@ def download_lmsal_index(file_write):
     file_con.close()
 
 
-def build_lmsal_index_path(filename=None, path=None):
+def build_lmsal_index_path(path, filename=None):
 
-    # Default path. database /tmp folder
-    if path is None:
-        path = App.TMP_HOME
     # Default filename
     if filename is None:
         filename = "lmsal_index.h5"
@@ -80,16 +74,16 @@ def read_lmsal_index(lmsal_filename, alter=1):
     return base_url, out_datetime, lmsal_path
 
 
-def query_lmsal_index(min_datetime, max_datetime=None):
+def query_lmsal_index(min_datetime, lmsal_index_path, max_datetime=None):
     """
     Time-based query of lmsal synchronic magnetic maps.  When max_datetime is None, function looks for exact matche
     to min_datetime. Else, the function will search the interval min_datetime<= x <=max_datetime.
     :param min_datetime: a single datetime
+    :param lmsal_index_path: character string specifying file path
     :param max_datetime: a single datetime
     :return: a pandas dataframe of datetimes and corresponding urls
     """
-    # generate path to index file
-    lmsal_index_path = build_lmsal_index_path()
+
     # check that index file exists
     file_exists = os.path.isfile(lmsal_index_path)
     if not file_exists:
