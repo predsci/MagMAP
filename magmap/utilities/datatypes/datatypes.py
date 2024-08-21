@@ -3,14 +3,10 @@ Module to hold the custom image and map types specific to the CHD project.
 """
 import datetime
 import os
-import pickle
 import sys
 
-import pandas
 
 import magmap.utilities.file_io.psi_hdf as psihdf
-import magmap.database.db_classes as db
-import magmap.database.db_funs as db_fun
 from magmap.data import prep
 import numpy as np
 import pandas as pd
@@ -627,32 +623,37 @@ class PsiMap:
             # --- Initialize empty dataframes based on Table schema ---
             # create the data tags
             # self.data_info = init_df_from_declarative_base(db.EUV_Images)
-            euv_image_cols = []
-            for column in db.EUV_Images.__table__.columns:
-                euv_image_cols.append(column.key)
-            data_files_cols = []
-            for column in db.Data_Files.__table__.columns:
-                data_files_cols.append(column.key)
-            data_cols = set().union(euv_image_cols, data_files_cols)
-            self.data_info = pd.DataFrame(data=None, columns=data_cols)
-            # map_info will be a combination of Data_Combos and EUV_Maps
-            image_columns = []
-            for column in db.Data_Combos.__table__.columns:
-                image_columns.append(column.key)
-            map_columns = []
-            for column in db.EUV_Maps.__table__.columns:
-                map_columns.append(column.key)
-            df_cols = set().union(image_columns, map_columns)
-            self.map_info = pd.DataFrame(data=None, columns=df_cols)
-            # method_info is a combination of Var_Defs and Method_Defs
-            meth_columns = []
-            for column in db.Method_Defs.__table__.columns:
-                meth_columns.append(column.key)
-            defs_columns = []
-            for column in db.Var_Defs.__table__.columns:
-                defs_columns.append(column.key)
-            df_cols = set().union(meth_columns, defs_columns)
-            self.method_info = pd.DataFrame(data=None, columns=df_cols)
+            # euv_image_cols = []
+            # for column in db.EUV_Images.__table__.columns:
+            #     euv_image_cols.append(column.key)
+            # data_files_cols = []
+            # for column in db.Data_Files.__table__.columns:
+            #     data_files_cols.append(column.key)
+            # data_cols = set().union(euv_image_cols, data_files_cols)
+            # self.data_info = pd.DataFrame(data=None, columns=data_cols)
+            # # map_info will be a combination of Data_Combos and EUV_Maps
+            # image_columns = []
+            # for column in db.Data_Combos.__table__.columns:
+            #     image_columns.append(column.key)
+            # map_columns = []
+            # for column in db.EUV_Maps.__table__.columns:
+            #     map_columns.append(column.key)
+            # df_cols = set().union(image_columns, map_columns)
+            # self.map_info = pd.DataFrame(data=None, columns=df_cols)
+            # # method_info is a combination of Var_Defs and Method_Defs
+            # meth_columns = []
+            # for column in db.Method_Defs.__table__.columns:
+            #     meth_columns.append(column.key)
+            # defs_columns = []
+            # for column in db.Var_Defs.__table__.columns:
+            #     defs_columns.append(column.key)
+            # df_cols = set().union(meth_columns, defs_columns)
+            # self.method_info = pd.DataFrame(data=None, columns=df_cols)
+
+            # until database definitions are set, initiate these to None
+            self.data_info = None
+            self.map_info = None
+            self.method_info = None
 
             # Type cast data arrays
             self.data = data.astype(DTypes.MAP_DATA)
@@ -743,7 +744,8 @@ class PsiMap:
 
         else:
             self.map_info.loc[0, 'fname'] = filename
-            db_session, self = db_fun.add_map_dbase_record(db_session, self, base_path, map_type=map_type)
+            # db_session, self = db_fun.add_map_dbase_record(db_session, self, base_path, map_type=map_type)
+            os.error("Database functionality not supported for PsiMap object at this time.")
 
         return db_session
 
@@ -902,7 +904,8 @@ class MagnetoMap(PsiMap):
         else:
             sys.exit("Adding MagnetoMap to database not yet supported.")
             self.map_info.loc[0, 'fname'] = filename
-            db_session, self = db_fun.add_map_dbase_record(db_session, self, base_path, map_type=map_type)
+            # db_session, self = db_fun.add_map_dbase_record(db_session, self, base_path, map_type=map_type)
+            os.error("Database functionality not supported for MagnetoMap object at this time.")
 
         return db_session
 
@@ -957,7 +960,8 @@ class MagnetoMap(PsiMap):
         else:
             sys.exit("Adding MagnetoMap to database not yet supported.")
             self.map_info.loc[0, 'fname'] = filename
-            db_session, self = db_fun.add_map_dbase_record(db_session, self, base_path, map_type=map_type)
+            # db_session, self = db_fun.add_map_dbase_record(db_session, self, base_path, map_type=map_type)
+            os.error("Database functionality not supported for MagnetoMap object at this time.")
 
         return db_session
 
