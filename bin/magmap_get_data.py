@@ -46,30 +46,35 @@ def argParsing():
   parser.add_argument(
             'period_start_input',
             help='Start date for data aquisition in the format:  YYYY-MM-DDTHH:MM:SS')
+
   parser.add_argument(
             'period_end_input',
             help='End date for data aquisition in the format:  YYYY-MM-DDTHH:MM:SS')
-  parser.add_argument('-dir',
+
+  parser.add_argument('-odir',
             help='Full path of the directory for output. Default is ${PWD}/magmap_data_maps',
             dest='download_dir',
-            default='magmap_data_maps',
+            default='magmap_data_disks',
             required=False)
+
   parser.add_argument('-cadence',
             help='Magnetogram download cadence (hours)',
             dest='input_interval_cadence',
             default=1.0,
             type=float,
             required=False)
+
   parser.add_argument('-search_width',
             help='Magnetogram download query window half-width (>0) (hours).',
             dest='input_del_interval',
             default=0.33,
             type=float,
             required=False)
+
   parser.add_argument('-index_filename',
             help='Filename for the CSV index file.  Default is "magmap_all.csv',
             dest='index_file',
-            default='magmap_all.csv',
+            default='magmap_disks_all.csv',
             required=False)
 
   return parser.parse_args()
@@ -158,7 +163,6 @@ def main():
   ## Get input agruments:
   args = argParsing()
   run(args)
-
 
 if __name__ == '__main__':
   main()
