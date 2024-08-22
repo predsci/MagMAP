@@ -332,19 +332,19 @@ def wrh5_hipft_map(h5_filename, stride1, stride2, stride3, f, method_info=None, 
     for i in range(0, ndims):
         # reminder: these dimensions are in striding-order, not array index order
         if i == 0:
-            h5file.create_dataset("dim1", data=stride1)
-            h5file['Data'].dims.create_scale(h5file['dim1'])
-            h5file['Data'].dims[0].attach_scale(h5file['dim1'])
+            dim = h5file.create_dataset("dim1", data=stride1)
+            dim.make_scale('dim1')
+            h5file['Data'].dims[0].attach_scale(dim)
             h5file['Data'].dims[0].label = 'dim1'
         elif i == 1:
-            h5file.create_dataset("dim2", data=stride2)
-            h5file['Data'].dims.create_scale(h5file['dim2'])
-            h5file['Data'].dims[1].attach_scale(h5file['dim2'])
+            dim = h5file.create_dataset("dim2", data=stride2)
+            dim.make_scale('dim2')
+            h5file['Data'].dims[1].attach_scale(dim)
             h5file['Data'].dims[1].label = 'dim2'
         elif i == 2:
-            h5file.create_dataset("dim3", data=stride3)
-            h5file['Data'].dims.create_scale(h5file['dim3'])
-            h5file['Data'].dims[2].attach_scale(h5file['dim3'])
+            dim = h5file.create_dataset("dim3", data=stride3)
+            dim.make_scale('dim3')
+            h5file['Data'].dims[2].attach_scale(dim)
             h5file['Data'].dims[2].label = 'dim3'
 
     # Convert the metadata to a json string, save it as an "attribute"

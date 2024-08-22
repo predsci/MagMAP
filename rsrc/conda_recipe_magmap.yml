@@ -5,9 +5,10 @@ channels:
 dependencies:
   - astropy
   - drms
-  - h5py
+  - h5py >= 3.0.0
   - matplotlib
   - numpy
+  - pandas < 2.0.0
   - python
   - pytz
   - scipy
