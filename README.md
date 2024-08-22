@@ -8,8 +8,8 @@
 
 ## Overview  
   
-MagMAP is a python package for downloading, mapping, and processing solar magnetograms.  
-It is an integral component 
+MagMAP is a python package for downloading, mapping, and processing solar 
+magnetograms. It is an integral component 
 of the Open-source Flux Transport [OFT](https://github.com/predsci/OFT) model.  
 
 ## Requirements
@@ -50,8 +50,8 @@ pip install MagMAP/
 ```
 
 ### Data Download
-The file bin/magmap_get_data.py is an example that is easily executed to download 
-HMI line-of-site magnetograms. Calling this routine from the command line with 
+The file bin/magmap_get_data.py is an executeable script that downloads 
+HMI line-of-site magnetograms. Calling this example routine from the command line with 
 start and end timestamps will download HMI_M 720s images at a one-hour cadence.
 ```bash
 cd MagMAP/bin
@@ -63,7 +63,7 @@ directory structure with updated index file that lists the timestamp and relativ
 path of each data file.  Additional arguments set the cadence, search window, 
 download directory, and index file name. Use the -h flag for more information.
 
-For an example script that updates your local directory with the most recent HMI
+For an example script that updates an existing directory with the most recent HMI
 magnetograms, see magmap/data/scripts/Update_local_HMI.py. 
 
 ### Mapping Data
