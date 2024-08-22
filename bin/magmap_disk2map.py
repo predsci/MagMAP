@@ -7,6 +7,7 @@ import time
 import argparse
 import pytz
 import signal
+import warnings
 #
 import magmap.utilities.datatypes.datatypes as psi_dtypes
 import magmap.maps.hipft_prep as hipft_prep
@@ -138,8 +139,8 @@ def run(args):
   map_nxcoord        = args.map_nxcoord
   R0                 = args.R0
 
-# For now, hard-code hmi LOS data series.
-  series = 'hmi.m_720s'
+  # Suppress Pandas FutureWarnings
+  warnings.simplefilter(action='ignore', category=FutureWarning)
 
   if period_start_input is None and period_end_input is not None:
     print("Error!  You must either provide both a start and end data, OR do not specify either to use the update/auto mode.")
@@ -221,7 +222,8 @@ def run(args):
   y_interp[0] = y_interp[0] + dy/4
   y_interp[-1] = y_interp[-1] - dy/4
 # interp expects sin(lat)
-  sin_lat = np.sin(y_interp)
+  sin_lat_interp = np.sin(y_interp)
+  sin_lat = np.sin(y_axis)
 
 # setup reduced-map grid (for saving to file)
   reduced_x = np.linspace(x_range[0], x_range[1], reduced_nxcoord)
@@ -265,9 +267,11 @@ def run(args):
 
     start_time = time.time()
     # interpolate to map
-    hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat, interp_field="data",
+    hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat_interp, interp_field="data",
                                    nprocs=nprocs, tpp=tpp, p_pool=p_pool, no_data_val=-65500.,
                                    y_cor=False, helio_proj=True)
+    # replace y-axis with original sin_lat grid
+    hmi_map.y = sin_lat
 
     interp_time += time.time() - start_time
 
