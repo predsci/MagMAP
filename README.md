@@ -19,25 +19,52 @@ To facilitate this, we have provided a conda recipe file to
 create a python environment that MagMAP can run in.
 Some packages/versions are in the conda-forge channel. 
 To add this channel, first check if it is there:  
-`conda config --show channels`  
+```bash
+conda config --show channels
+```  
 If it is not there, add conda-forge:  
-`conda config --append channels conda-forge`  
+```bash
+conda config --append channels conda-forge
+```  
 The MagMAP conda environment can then be built using:  
-`conda env create -f rsrc/conda_recipe_magmap.yml`  
+```bash
+conda env create -f rsrc/conda_recipe_magmap.yml
+```  
 To activate the environment, use:  
-`conda activate mapmag`  
+```bash
+conda activate magmap
+```  
   
 
 ## Getting Started
+### Install MagMAP into Python Environment
+Get a copy of the code:
+```bash
+cd myDir
+git clone https://github.com/predsci/MagMAP.git
+```
+
+Pip install:
+```bash
+pip install MagMAP/
+```
+
 ### Data Download
-See the following files for examples of how to download a set of HMI line-of-sight
-magnetorgrams - magmap/examples/Download_HMI.py, and then update the directory with
-the most recent magnetograms - magmap/data/scripts/Update_local_HMI.py.  The primary 
-function of this code is to specify a time range and cadence, download 
+The file bin/magmap_get_data.py is an example that is easily executed to download 
+HMI line-of-site magnetograms. Calling this routine from the command line with 
+start and end timestamps will download HMI_M 720s images at a one-hour cadence.
+```bash
+cd MagMAP/bin
+python magmap_get_data.py 2024-01-01T00:00:00 2024-01-02T00:00:00
+```
+The primary function of this code is to specify a time range and cadence, download 
 available data that matches the specification, and keep everything in an orderly
-directory structure with updated index file.  The update script (Update_local_HMI.py)
-writes an index file all-files.csv that lists the timestamp and relative path of 
-each data file.
+directory structure with updated index file that lists the timestamp and relative 
+path of each data file.  Additional arguments set the cadence, search window, 
+download directory, and index file name. Use the -h flag for more information.
+
+For an example script that updates your local directory with the most recent HMI
+magnetograms, see magmap/data/scripts/Update_local_HMI.py. 
 
 ### Mapping Data
 Once a local directory of HMI data exists, the script magmap/examples/Map_HMI_dir.py
