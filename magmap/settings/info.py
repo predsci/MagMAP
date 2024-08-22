@@ -1,5 +1,5 @@
 """
-Holder for static, system independent information and settings for the CHD project.
+Holder for static, system independent information and settings for the MagMap project.
 """
 # CHD Package version number
 version = '0.9.0'

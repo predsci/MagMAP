@@ -115,14 +115,12 @@ def run(args):
   period_end = datetime.datetime.strptime(period_end_input, '%Y-%m-%dT%H:%M:%S')
   period_end = pytz.utc.localize(period_end)
 
-  period_range = [period_start, period_end]
-
 # define target times over download period using interval_cadence (image times in astropy Time() format)
   target_times = pd.date_range(start=period_start, end=period_end, freq=interval_cadence).to_pydatetime()
   query_range = [period_start-del_interval, target_times[-1]+del_interval]
 
 # initialize the helper class for HMI
-  hmi = drms_helpers.HMI_M720s(verbose=True, series=series, filters=filters)
+  hmi = drms_helpers.HMI_M720s(series=series, filters=filters, verbose=True)
 
 # query available magnetograms
   available_hmi = hmi.query_time_interval(time_range=query_range)

@@ -147,7 +147,7 @@ for index, row in available_raw.iterrows():
     reduced_map.write_to_file(map_data_dir, map_type='magneto', filename=map_rel)
     IOtime += time.time() - start_time
 
-    ## --- repeat with radius correction (Yang) -----------------------
+    ## --- repeat with radius correction (jitter test) -----------------------
     if not os.path.exists(os.path.join(map_cor_dir, sub_dir)):
         os.makedirs(os.path.join(map_cor_dir, sub_dir), mode=0o755)
     hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat, interp_field="data",

@@ -290,139 +290,6 @@ def rdh5_fullmap(h5_filename):
             no_data_val, mu, origin_image, chd)
 
 
-def wrh5_map(h5_filename, x, y, z, f, method_info=None, data_info=None, map_info=None,
-             var_info=None, no_data_val=None):
-    """
-    Write an hdf5 file in the standard PSI format + json metadata. This
-    is meant for writing separate map data arrays to separate hdf files in
-    order to maintain PSI tools compatibility.  Use wrh5_fullmap() to combine
-    all data arrays into a single hdf.
-    - f is a 1, 2, or 3D numpy array. In the map context, f could be image
-        data, mu, origin_image, or something else.
-
-    - x, y, z are the corresponding 1D scales
-
-    - method_info, data_info, map_info, and var_info are optional
-      pandas dataframes of metadata that will be converted to a json string.
-      no_data_val is an optional scalar metadata.
-      - they are intended to hold descriptive info, not big arrays.
-      - saving it as an attribute (vs. a dataset) will preserve
-       compatibility with the PSI fortran tools.
-      - the metadata also can be dumped with h5dump from the command line
-        e.g.: h5dump -a chd_meta datafile.h5
-    """
-    h5file = h5.File(h5_filename, 'w')
-
-    # Create the dataset (Data is the name used by the psi data)).
-    h5file.create_dataset("Data", data=f)
-
-    # Get number of dimensions:
-    ndims = np.ndim(f)
-
-    # Set the scales:
-    for i in range(0, ndims):
-        if i == 0:
-            dim = h5file.create_dataset("dim1", data=x)
-            h5file['Data'].dims.create_scale(dim, 'dim1')
-            h5file['Data'].dims[0].attach_scale(dim)
-            h5file['Data'].dims[0].label = 'dim1'
-        elif i == 1:
-            dim = h5file.create_dataset("dim2", data=y)
-            h5file['Data'].dims.create_scale(dim, 'dim2')
-            h5file['Data'].dims[1].attach_scale(dim)
-            h5file['Data'].dims[1].label = 'dim2'
-        elif i == 2:
-            dim = h5file.create_dataset("dim3", data=z)
-            h5file['Data'].dims.create_scale(dim, 'dim3')
-            h5file['Data'].dims[2].attach_scale(dim)
-            h5file['Data'].dims[2].label = 'dim3'
-
-    # Convert the metadata to a json string, save it as an "attribute"
-    if method_info != None:
-        h5file.attrs['method_info'] = method_info.to_json(orient="split")
-    if data_info != None:
-        h5file.attrs['data_info'] = data_info.to_json(orient="split")
-    if map_info != None:
-        h5file.attrs['map_info'] = map_info.to_json(orient="split")
-    if var_info != None:
-        h5file.attrs['var_info'] = var_info.to_json(orient="split")
-    if no_data_val is not None:
-        h5file.attrs['no_data_val'] = no_data_val
-
-    # Close the file:
-    h5file.close()
-
-
-def rdh5_map(h5_filename):
-    """
-    Read an hdf5 file in the PSI map format.  This function reads
-    map files written by wrh5_map().
-    - f is a 1, 2, or 3D numpy array
-    - mu and image_origin are optional secondary data arrays with
-        dimensions identical to f
-
-    - x, y, z are the corresponding 1D scales
-
-    - method_info, data_info, map_info, and var_info are optional
-      pandas dataframes of metadata that will have been saved as
-      json strings.
-      no_data_val is an optional scalar metadata.
-    """
-    x = np.array([])
-    y = np.array([])
-    z = np.array([])
-    f = np.array([])
-
-    h5file = h5.File(h5_filename, 'r')
-    f = h5file['Data']
-    dims = f.shape
-    ndims = np.ndim(f)
-
-    # Get the scales if they exist:
-    for i in range(0, ndims):
-        if i == 0:
-            if (len(h5file['Data'].dims[0].keys()) != 0):
-                x = h5file['Data'].dims[0][0]
-        elif i == 1:
-            if (len(h5file['Data'].dims[1].keys()) != 0):
-                y = h5file['Data'].dims[1][0]
-        elif i == 2:
-            if (len(h5file['Data'].dims[2].keys()) != 0):
-                z = h5file['Data'].dims[2][0]
-
-    x = np.array(x)
-    y = np.array(y)
-    z = np.array(z)
-    f = np.array(f)
-
-    # load the metadata, convert it from the json string to a dict.
-    if 'method_info' in h5file.attrs:
-        method_info = pd.read_json(h5file.attrs['method_info'], orient="split")
-    else:
-        method_info = None
-    if 'data_info' in h5file.attrs:
-        data_info = pd.read_json(h5file.attrs['data_info'], orient="split")
-    else:
-        data_info = None
-    if 'map_info' in h5file.attrs:
-        map_info = pd.read_json(h5file.attrs['map_info'], orient="split")
-    else:
-        map_info = None
-    if 'var_info' in h5file.attrs:
-        var_info = pd.read_json(h5file.attrs['var_info'], orient="split")
-    else:
-        var_info = None
-    if 'no_data_val' in h5file.attrs:
-        no_data_val = h5file.attrs['no_data_val']
-    else:
-        no_data_val = None
-
-    h5file.close()
-
-    return (x, y, z, f, method_info, data_info, map_info, var_info,
-            no_data_val)
-
-
 def wrh5_hipft_map(h5_filename, stride1, stride2, stride3, f, method_info=None, data_info=None, map_info=None,
                    no_data_val=None, layers=None, assim_method=None, fits_header=None, car_rot=None, crln_obs=None,
                    crlt_obs=None, t_rec=None):
@@ -465,19 +332,19 @@ def wrh5_hipft_map(h5_filename, stride1, stride2, stride3, f, method_info=None, 
     for i in range(0, ndims):
         # reminder: these dimensions are in striding-order, not array index order
         if i == 0:
-            h5file.create_dataset("dim1", data=stride1)
-            h5file['Data'].dims.create_scale(h5file['dim1'])
-            h5file['Data'].dims[0].attach_scale(h5file['dim1'])
+            dim = h5file.create_dataset("dim1", data=stride1)
+            dim.make_scale('dim1')
+            h5file['Data'].dims[0].attach_scale(dim)
             h5file['Data'].dims[0].label = 'dim1'
         elif i == 1:
-            h5file.create_dataset("dim2", data=stride2)
-            h5file['Data'].dims.create_scale(h5file['dim2'])
-            h5file['Data'].dims[1].attach_scale(h5file['dim2'])
+            dim = h5file.create_dataset("dim2", data=stride2)
+            dim.make_scale('dim2')
+            h5file['Data'].dims[1].attach_scale(dim)
             h5file['Data'].dims[1].label = 'dim2'
         elif i == 2:
-            h5file.create_dataset("dim3", data=stride3)
-            h5file['Data'].dims.create_scale(h5file['dim3'])
-            h5file['Data'].dims[2].attach_scale(h5file['dim3'])
+            dim = h5file.create_dataset("dim3", data=stride3)
+            dim.make_scale('dim3')
+            h5file['Data'].dims[2].attach_scale(dim)
             h5file['Data'].dims[2].label = 'dim3'
 
     # Convert the metadata to a json string, save it as an "attribute"

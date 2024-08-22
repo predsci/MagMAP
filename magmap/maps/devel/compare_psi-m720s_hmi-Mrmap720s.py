@@ -212,7 +212,7 @@ for index, row in available_helio_proj_sqrtBr.iterrows():
 
 print("\n")
 
-# convert helio-projected psi_maps with Yang-Br and lon-shift to png
+# convert helio-projected psi_maps with jitter-Br and lon-shift to png
 for index, row in available_helio_proj_shift.iterrows():
     print("Converting file:", row.rel_path, "to PNG.")
     rel_path = row.rel_path

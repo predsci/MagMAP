@@ -1,6 +1,6 @@
 """
 Given an image, generate maps by three different methods:
-  - Yang/JSOC method to produce HMI_Mrmap
+  - JSOC method to produce HMI_Mrmap
   - PSI method to reproduce HMI_Mrmap
   - PSI method
 Then do multiple comparisons of the LOS-to-Br conversion and longitudidnal shift
@@ -348,13 +348,13 @@ best_shift_psi = "/Volumes/terminus_ext/HMI_M720s/hmi_map_900x1800_helio-proj_sh
 best_shift_psi = psi_dtypes.read_hipft_map(best_shift_psi)
 
 psi_data = np.copy(best_shift_map.data[1:-1, 1:-1])
-yang_data = np.copy(mr_map.data[1:-1, 1:-1])
+jitter_data = np.copy(mr_map.data[1:-1, 1:-1])
 
-# convert yang-mu back to correct mu
-yang_mu = np.copy(best_shift_map.mu[1:-1, 1:-1])
-yang_im_radius = np.sqrt(1 - yang_mu**2)
+# convert jitter-mu back to correct mu
+jitter_mu = np.copy(best_shift_map.mu[1:-1, 1:-1])
+jitter_im_radius = np.sqrt(1 - jitter_mu**2)
 radius_per_half_image = r_sun_obs/cdelt/im_pix_width
-im_radius = yang_im_radius/radius_per_half_image
+im_radius = jitter_im_radius/radius_per_half_image
 cor_mu = np.sqrt(1 - im_radius**2)
 
 # determine observer CR coords from fits header
@@ -366,17 +366,17 @@ solar_radii_centers = (solar_radii_vec[:-1] + solar_radii_vec[1:])/2
 mu_edge_vec = np.sqrt(1 - solar_radii_vec**2)
 mu_center_vec = (mu_edge_vec[:-1] + mu_edge_vec[1:])/2
 psi_mean = np.full([len(mu_edge_vec)-1, ], 0.)
-yang_mean = np.full([len(mu_edge_vec)-1, ], 0.)
+jitter_mean = np.full([len(mu_edge_vec)-1, ], 0.)
 psi_abs_mean = np.full([len(mu_edge_vec)-1, ], 0.)
-yang_abs_mean = np.full([len(mu_edge_vec)-1, ], 0.)
+jitter_abs_mean = np.full([len(mu_edge_vec)-1, ], 0.)
 psiBr_mean = np.full([len(mu_edge_vec)-1, ], 0.)
 psiBr_abs_mean = np.full([len(mu_edge_vec)-1, ], 0.)
 
 # PSI maps tend to have slightly less pixels at edge because of edge-preserving downsample
 psi_index = psi_data > best_shift_map.no_data_val
-yang_index = yang_data > mr_map.no_data_val
+jitter_index = jitter_data > mr_map.no_data_val
 psiBr_index = best_shift_psi.data != best_shift_psi.no_data_val
-data_index = psi_index & psiBr_index & yang_index
+data_index = psi_index & psiBr_index & jitter_index
 for ii in range(len(solar_radii_vec)-1):
     # determine which pixels land in this bin
     upper_thresh_mu = mu_edge_vec[ii]
@@ -385,56 +385,56 @@ for ii in range(len(solar_radii_vec)-1):
     best_shift_index = mu_index & data_index
     # calculate a mean value for each bin
     psi_mean[ii] = np.nanmean(psi_data[best_shift_index])
-    yang_mean[ii] = np.nanmean(yang_data[best_shift_index])
+    jitter_mean[ii] = np.nanmean(jitter_data[best_shift_index])
     psi_abs_mean[ii] = np.nanmean(np.abs(psi_data[best_shift_index]))
-    yang_abs_mean[ii] = np.nanmean(np.abs(yang_data[best_shift_index]))
+    jitter_abs_mean[ii] = np.nanmean(np.abs(jitter_data[best_shift_index]))
     # also record for PSI-Br
     psiBr_mean[ii] = np.nanmean(best_shift_psi.data[best_shift_index])
     psiBr_abs_mean[ii] = np.nanmean(np.abs(best_shift_psi.data[best_shift_index]))
 
 center_limb_ang = np.arcsin(solar_radii_centers)*180/np.pi
 
-# first plot PSI-Br vs Yang Br
+# first plot PSI-Br vs jitter Br
 plt.figure(0)
 plt.plot(center_limb_ang, psiBr_abs_mean)
-plt.plot(center_limb_ang, yang_abs_mean)
+plt.plot(center_limb_ang, jitter_abs_mean)
 plt.yscale('log')
 plt.xlabel("Center-to-limb angle (deg)")
 plt.ylabel("Mean Abs magnitude (Gs)")
 plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
 plt.legend(['PSI', 'HMI_Mrmap'])
 
-plt.savefig(png_dir + "/Br-PSI-Yang_v_radius.png", dpi=600)
+plt.savefig(png_dir + "/Br-PSI-jitter_v_radius.png", dpi=600)
 plt.close(0)
 
 
-# first plot PSI-Br div Yang Br
+# first plot PSI-Br div jitter Br
 plt.figure(0)
 plt.plot(deg_vec[:-11], los2br[:-11]/los2br_cor[:-11])
-plt.plot(center_limb_ang[:-1], psiBr_abs_mean[:-1]/yang_abs_mean[:-1])
+plt.plot(center_limb_ang[:-1], psiBr_abs_mean[:-1]/jitter_abs_mean[:-1])
 plt.xlabel("Center-to-limb angle (deg)")
 plt.ylabel("Mean Abs magnitude (PSI/HMI_Mrmap)")
 plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
 plt.legend(["Theoretic", "Actual"])
 
-plt.savefig(png_dir + "/Br-PSI-div-Yang_v_radius.png", dpi=600)
+plt.savefig(png_dir + "/Br-PSI-div-jitter_v_radius.png", dpi=600)
 plt.close(0)
 
 
 # plot the ratio between absolute means
 plt.figure(0)
-plt.plot(center_limb_ang, psi_abs_mean/yang_abs_mean)
+plt.plot(center_limb_ang, psi_abs_mean/jitter_abs_mean)
 plt.xlabel("Center-to-limb angle (deg)")
-plt.ylabel("Mean Abs (PSI/Yang)")
+plt.ylabel("Mean Abs (PSI/jitter)")
 plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
 
-plt.savefig(png_dir + "/PSI-div-Yang_v_radius.png", dpi=600)
+plt.savefig(png_dir + "/PSI-div-jitter_v_radius.png", dpi=600)
 plt.close(0)
 
 
 # determine PSI/MRmap ratio for each Theta value
 psi_data = np.copy(best_shift_map.data)
-ratio_data = np.abs(psi_data/yang_data)
+ratio_data = np.abs(psi_data/jitter_data)
 
 ignore_index = (np.isnan(ratio_data)) | (ratio_data > 1000)
 row_means = np.mean(ratio_data, axis=1, where=~ignore_index)
@@ -449,25 +449,25 @@ im_sine_lat = np.sin(im_shifted_theta)
 plt.figure(0)
 plt.plot(im_sine_lat[use_index], row_means[use_index])
 plt.xlabel("Sine Lat")
-plt.ylabel("Mean Abs (PSI/Yang)")
+plt.ylabel("Mean Abs (PSI/jitter)")
 plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
 
-plt.savefig(png_dir + "/PSI-div-Yang_v_radius.png", dpi=600)
+plt.savefig(png_dir + "/PSI-div-jitter_v_radius.png", dpi=600)
 plt.close(0)
 
 # determine PSI/MRmap ratio for each Theta value (theoretical)
-yang_mu = np.copy(best_shift_map.mu)
-yang_im_radius = np.sqrt(1 - yang_mu**2)
+jitter_mu = np.copy(best_shift_map.mu)
+jitter_im_radius = np.sqrt(1 - jitter_mu**2)
 radius_per_half_image = r_sun_obs/cdelt/im_pix_width
-im_radius = yang_im_radius/radius_per_half_image
+im_radius = jitter_im_radius/radius_per_half_image
 psi_mu = np.sqrt(1 - im_radius**2)
 
-multi_factor = yang_mu/psi_mu
+multi_factor = jitter_mu/psi_mu
 
 psi_index = best_shift_map.data > best_shift_map.no_data_val
-yang_index = mr_map.data[1:-1, 1:-1] > mr_map.no_data_val
+jitter_index = mr_map.data[1:-1, 1:-1] > mr_map.no_data_val
 psiBr_index = best_shift_psi.data != best_shift_psi.no_data_val
-data_index = psi_index & psiBr_index & yang_index
+data_index = psi_index & psiBr_index & jitter_index
 
 mu_limit = 0.1
 keep_index = (psi_mu > mu_limit) & data_index
@@ -483,9 +483,9 @@ plt.figure(0)
 plt.plot(im_sine_lat[use_index], row_means[use_index])
 plt.ylim((-2, 4))
 plt.xlabel("Sine Lat")
-plt.ylabel("Mean (PSI/Yang)")
+plt.ylabel("Mean (PSI/jitter)")
 plt.grid(alpha=0.6, linestyle='dashed', lw=0.5)
 
-plt.savefig(png_dir + "/PSI-div-Yang_v_sinlat_" + str(mu_limit) + ".png", dpi=600)
+plt.savefig(png_dir + "/PSI-div-jitter_v_sinlat_" + str(mu_limit) + ".png", dpi=600)
 plt.close(0)
 

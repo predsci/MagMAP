@@ -11,7 +11,6 @@ from six.moves.urllib.request import urlretrieve
 from six.moves.urllib.error import HTTPError, URLError
 import os
 import pandas as pd
-from collections import OrderedDict
 import astropy.io.fits
 import astropy.time as astro_time
 import numpy as np
@@ -99,32 +98,6 @@ def construct_path_and_fname(base_dir, dtime, prefix, postfix, extension, inst=N
         fname = prefix + '_' + YYYY + MM + DD + 'T' + HH + NN + SS + '_' + postfix + '.' + extension
 
     return sub_dir, fname
-
-
-def construct_hdf5_pre_and_post(chd_meta):
-    """
-    Standardize/Centralize hdf5 image filename production
-    :param chd_meta: image meta dictionary. Output of euv_utils.py - get_metadata()
-    :return: prefix, postfix, and extension strings
-    """
-    prefix = chd_meta['instrument'].lower().replace('-', '') + '_lvl2'
-    postfix = str(chd_meta['wavelength'])
-    extension = 'h5'
-
-    return prefix, postfix, extension
-
-
-def custom_dataframe(times, jds, urls, spacecraft, instrument, filters):
-    """
-    General function designed to take information from any query and turn it into a sliceable
-    pandas dataframe with only the information I want for sorting/downloading
-    The basic idea here is to make it easier to work with AIA and EUVI query results
-    :return:
-    """
-    data_frame = pd.DataFrame(OrderedDict({'spacecraft': spacecraft, 'instrument': instrument,
-                                           'filter': filters, 'time': times, 'jd': jds, 'url': urls}))
-
-    return data_frame
 
 
 def compress_uncompressed_fits_image(infile, outfile):
@@ -293,31 +266,6 @@ def carrington_rotation_number_relative(time, lon):
 
     return cr_now
 
-
-def construct_map_path_and_fname(base_dir, dtime, map_id, map_type, extension, inst=None, mkdir=True):
-    """
-    Wrapper to adapt construct_path_and_fname() for map files.
-    - it returns the subdirectory path and filename
-    """
-
-    prefix = map_type
-    postfix = 'MID' + str(map_id)
-    maptype_base_dir = os.path.join(base_dir, map_type)
-    # make the directory if needed
-    if mkdir:
-        # first check if the main directory exists
-        if not os.path.isdir(base_dir):
-            raise Exception('Base path does not exist! ' + base_dir)
-            return None, None
-        # check if the subdirectory exists
-        if not os.path.isdir(maptype_base_dir):
-            os.makedirs(maptype_base_dir)
-    sub_dir, fname = construct_path_and_fname(maptype_base_dir, dtime, prefix, postfix, extension, inst=inst,
-                                              mkdir=mkdir)
-
-    return sub_dir, fname
-
-
 def print_full_dataframe(df):
     """
     Helper function to print a pandas dataframe with NO truncation of rows/columns
@@ -407,26 +355,3 @@ def gen_hipft_index(dir_path):
 
     return write_df
 
-
-def gen_hipft_index_old(dir_path):
-    available_maps = read_db_dir(dir_path)
-
-    # update column headers and add linux days
-    write_df = available_maps.rename(columns=dict(date='hmi_datetime', rel_path='map_path'))
-    write_df.loc[:, 'target_datetime'] = write_df.hmi_datetime.dt.round('H')
-    # re-order columns and reset index
-    write_df = write_df.loc[:, ['target_datetime', 'hmi_datetime', 'map_path']]
-    write_df.reset_index(drop=True, inplace=True)
-
-    # add fractional days since unix-epoch
-    target_datetime = write_df.target_datetime.dt.to_pydatetime()
-    target_unix_seconds = [float(target_datetime[ii].strftime("%s")) for ii in range(len(target_datetime))]
-    target_unix_days = [x / (60 * 60 * 24) for x in target_unix_seconds]
-    hmi_datetime = write_df.hmi_datetime.dt.to_pydatetime()
-    hmi_unix_seconds = [float(hmi_datetime[ii].strftime("%s")) for ii in range(len(hmi_datetime))]
-    hmi_unix_days = [x / (60 * 60 * 24) for x in hmi_unix_seconds]
-    # add new columns to dataframe
-    unix_time_df = pd.DataFrame(dict(target_unix_days=target_unix_days, hmi_unix_days=hmi_unix_days))
-    write_df = pd.concat([unix_time_df, write_df], axis=1)
-
-    return write_df

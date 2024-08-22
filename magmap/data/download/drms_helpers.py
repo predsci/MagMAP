@@ -47,7 +47,7 @@ class HMI_M720s:
         self.series = series
 
         # initialize the drms client
-        self.client = drms.Client(verbose=verbose)
+        self.client = drms.Client()
 
         # obtain ALL of the keys for this series (i believe this connects to JSOC)
         self.allkeys = self.client.keys(self.series)
@@ -349,7 +349,7 @@ class HMI_B720s:
         self.series = 'hmi.m_720s'
 
         # initialize the drms client
-        self.client = drms.Client(verbose=verbose)
+        self.client = drms.Client()
 
         # obtain ALL of the keys for this series (i believe this connects to JSOC)
         self.allkeys = self.client.keys(self.series)
@@ -644,7 +644,7 @@ class HMI_Mrmap_latlon_720s:
         self.series = 'hmi.Mrmap_latlon_720s'
 
         # initialize the drms client
-        self.client = drms.Client(verbose=verbose)
+        self.client = drms.Client()
 
         # obtain ALL of the keys for this series (i believe this connects to JSOC)
         self.allkeys = self.client.keys(self.series)
