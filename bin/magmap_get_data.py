@@ -52,7 +52,7 @@ def argParsing():
             help='End date for data aquisition in the format:  YYYY-MM-DDTHH:MM:SS')
 
   parser.add_argument('-odir',
-            help='Full path of the directory for output. Default is ${PWD}/magmap_data_maps',
+            help='Full path of the directory for output. Default is ${PWD}/magmap_data_disks',
             dest='download_dir',
             default='magmap_data_disks',
             required=False)
