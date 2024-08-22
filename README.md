@@ -1,6 +1,15 @@
-# MagMAP: Magnetic Mapping And Processing
+<img width=500 src="doc/magmap_logo.png" alt="HipFT" />  
 
-MagMAP is a python package for downloading, mapping, and processing solar magnetograms.  It is an integral component 
+# MagMAP: Magnetic Mapping And Processing
+    
+[Predictive Science Inc.](https://www.predsci.com)  
+ 
+--------------------------------  
+
+## Overview  
+  
+MagMAP is a python package for downloading, mapping, and processing solar magnetograms.  
+It is an integral component 
 of the Open-source Flux Transport [OFT](https://github.com/predsci/OFT) model.  
 
 ## Requirements
