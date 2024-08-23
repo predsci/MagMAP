@@ -132,19 +132,21 @@ def run(args):
     datetime.datetime.strptime(x, "%Y.%m.%d_%H:%M:%S").replace(tzinfo=pytz.UTC)
     for x in available_hmi.time])
 
+  total_possible_files = len(match_times)
+
   for index, row in match_times.iterrows():
     time_diff = available_datetimes - row.target_time.to_pydatetime()
     time_diff = np.abs(time_diff)
     best_match = time_diff.argmin()
     if time_diff[best_match] <= del_interval:
       # download resulting magnetogram
-      print(f'Acquiring data for time: {available_hmi.loc[best_match].time}, quality: {available_hmi.loc[best_match].quality}')
+      print(f'\nStep {index+1}/{total_possible_files}:  Acquiring data for {available_hmi.loc[best_match].time}, quality code: {available_hmi.loc[best_match].quality}')
       sub_dir, fname, exit_flag = hmi.download_image_fixed_format(
           data_series=available_hmi.loc[best_match], base_dir=download_dir,
           update=True, overwrite=False, verbose=True
       )
     else:
-      print(f'  NO SUITABLE DATA FOR INTERVAL AT: {row.hmi_time}')
+      print(f'\nStep {index}/{total_possible_files}: --> NO SUITABLE DATA FOR SELECTED INTERVAL AT: {row.hmi_time}')
 
 # read the updated filesystem
   available_raw = io_helpers.read_db_dir(download_dir)
@@ -154,9 +156,11 @@ def run(args):
   index_full_path = os.path.join(sub_dir, index_file)
   if not os.path.isdir(sub_dir):
     os.makedirs(sub_dir)
+  print(f'\nGenerating index CSV file: {index_full_path}')
   available_raw.to_csv(index_full_path, index=False,
                        date_format="%Y-%m-%dT%H:%M:%S", float_format='%.5f')
 
+  print(f'\nMagMAP data acquisition complete!\n')
 def main():
   ## Get input agruments:
   args = argParsing()

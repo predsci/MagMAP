@@ -152,6 +152,14 @@ def run(args):
 
   if period_start_input is None and period_end_input is None:
      period_start_input = 'auto'
+
+  if map_nycoord <= reduced_nycoord:
+    print("Error!  The interpolation grid must be larger than the final grid.")
+    return
+
+  if map_nxcoord <= reduced_nxcoord:
+    print("Error!  The interpolation grid must be larger than the final grid.")
+    return
 #
 # ----- End Inputs -------------------------
 #
@@ -163,18 +171,19 @@ def run(args):
       available_raw['date'] = pd.to_datetime(available_raw['date'], format="%Y-%m-%dT%H:%M:%S").dt.tz_localize('UTC')
   else:
       print("Did not find an index file at " + raw_data_dir + "/index_files/" + index_file_disks)
-      print("\nReading filesystem directly from dir: " + raw_data_dir + "\n")
+      print("\nReading filesystem directly from dir: " + raw_data_dir)
       available_raw = io_helpers.read_db_dir(raw_data_dir)
   if len(available_raw) == 0:
       raise BaseException(f'Could not find any files in {raw_data_dir}')
 
 # initial time
   if period_start_input.lower() == "auto":
+    print("\nChecking if output map directory already exists...")
     if os.path.exists(os.path.join(map_data_dir, "index_files", index_file_maps)):
       available_map = pd.read_csv(os.path.join(map_data_dir, "index_files", index_file_maps))
       available_map['date'] = pd.to_datetime(available_map['target_datetime_utc'], format="%Y-%m-%dT%H:%M:%S").dt.tz_localize('UTC')
     else:
-      print("\nReading filesystem directly from dir: " + map_data_dir + "\n")
+      print("\nNo index file found in output directory, attempting to read files in the directly, otherwise will create it...")
       available_map = io_helpers.read_db_dir(map_data_dir)
 
     # select all maps between these dates
@@ -203,6 +212,7 @@ def run(args):
 # filter the available raw files to the selected set
   available_raw = available_raw.loc[keep_ind, :]
 
+  print("\nDiscovered "+str(len(available_raw))+" disk images that need processing/mapping.")
 
 # disable pool of processors option
   p_pool = None
@@ -237,8 +247,12 @@ def run(args):
   interp_time = 0
   down_samp_time = 0
   map_proc_time = 0
+  loop_idx = 0
 
   for index, row in available_raw.iterrows():
+ 
+    loop_idx = loop_idx + 1
+
     start_time = time.time()
 
     rel_path = row.rel_path
@@ -255,7 +269,7 @@ def run(args):
       os.makedirs(os.path.join(map_data_dir, sub_dir), mode=0o755)
     # for the purpose of this script, skip if file already exists
     if os.path.exists(os.path.join(map_data_dir, map_rel)):
-      print("Map file already exists. SKIPPING!")
+      print("\nStep "+str(loop_idx)+"/"+str(len(available_raw))+":  Map file already exists. SKIPPING!")
       continue
 
     # load to LosMagneto object
@@ -266,6 +280,9 @@ def run(args):
     IOtime += time.time() - start_time
 
     start_time = time.time()
+
+    print("\nStep "+str(loop_idx)+"/"+str(len(available_raw)))
+
     # interpolate to map
     hmi_map = hmi_im.interp_to_map(R0=R0, map_x=x_axis, map_y=sin_lat_interp, interp_field="data",
                                    nprocs=nprocs, tpp=tpp, p_pool=p_pool, no_data_val=-65500.,
@@ -317,28 +334,29 @@ def run(args):
 
 
   n_its = available_raw.shape[0]
-  if n_its == 0:
-    print("No maps to update.")
-  else:
+  if n_its > 0:
     IOtime = IOtime/n_its
     image_proc_time = image_proc_time/n_its
     interp_time = interp_time/n_its
     down_samp_time = down_samp_time/n_its
     map_proc_time = map_proc_time/n_its
-
     total_time = IOtime + image_proc_time + interp_time + down_samp_time + map_proc_time
 
-    print(" ")
-    print("Total time: ", total_time)
-    print("IO time: ", IOtime, "s or ", IOtime/total_time*100, "%", sep="")
-    print("Image proc time: ", image_proc_time, "s or ", image_proc_time/total_time*100, "%", sep="")
-    print("Interpolation time: ", interp_time, "s or ", interp_time/total_time*100, "%", sep="")
-    print("Down sampling time: ", down_samp_time, "s or ", down_samp_time/total_time*100, "%", sep="")
-    print("Map proc time: ", map_proc_time, "s or ", map_proc_time/total_time*100, "%", sep="")
-
-    print("")
-
-  print("MagMap mapping complete!")
+    format_str = '%19s %10.2f sec  [%5.1f%%]'
+    print(' ')
+    print('----------------  Timing -------------------')
+    print(' ')
+    print(format_str % ("Input/Output:     ", IOtime,          IOtime/total_time*100))
+    print(format_str % ("Image processing: ", image_proc_time, image_proc_time/total_time*100))
+    print(format_str % ("Interpolation:    ", interp_time,     interp_time/total_time*100))
+    print(format_str % ("Down sampling:    ", down_samp_time,  down_samp_time/total_time*100))
+    print(format_str % ("Map processing:   ", map_proc_time,   map_proc_time/total_time*100))
+    print('--------------------------------------------')
+    print(format_str % ("Total:            ", total_time,      100.0))
+    print('---------------------------------------------')
+    
+  print("")
+  print("MagMAP mapping complete!")
 
 def main():
   ## Get input agruments:
