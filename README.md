@@ -55,7 +55,7 @@ HMI line-of-site magnetograms. Calling this example routine from the command lin
 start and end timestamps will download HMI_M 720s images at a one-hour cadence.
 ```bash
 cd MagMAP/bin
-python magmap_get_data.py 2024-01-01T00:00:00 2024-01-02T00:00:00
+python magmap_get_data.py 2024-01-01T00:00:00 2024-01-02T00:00:00 -odir my_hmi_720s_dir/
 ```
 The primary function of this code is to specify a time range and cadence, download 
 available data that matches the specification, and keep everything in an orderly
@@ -63,19 +63,30 @@ directory structure with updated index file that lists the timestamp and relativ
 path of each data file.  Additional arguments set the cadence, search window, 
 download directory, and index file name. Use the -h flag for more information.
 
-For an example script that updates an existing directory with the most recent HMI
-magnetograms, see magmap/data/scripts/Update_local_HMI.py. 
+For the purpose of automated data downloading, the example script magmap/data/scripts/Update_local_HMI.py 
+shows in more detail how to update an existing directory with the most recent HMI
+magnetograms. 
 
 ### Mapping Data
-Once a local directory of HMI data exists, the script magmap/examples/Map_HMI_dir.py
-can be used to generate maps.  Additionally, the script 
-magmap/maps/scripts/Update_Map_HMI.py can be used to update maps as new data comes 
-in.  The mapping process has five primary steps
+Once a local directory of HMI data exists, the executable magmap_disk2map.py
+can be used to transform magnetogram images to maps (ready for HipFT input ). In its default state,  
+```bash
+cd MagMAP/bin
+python magmap_disk2map.py my_hmi_720s_dir/ -odir my_hipft_hmi_dir/
+```
+the routine will generate a 1024x512 Carrington map for each HMI fits file
+in the data directory 'my_hmi_720s_dir/'.  Use the -h flag to see all available
+input parameters.
+  The mapping process has five primary steps
 - Load the disk FITS file into a LosMagneto object
 - High resolution interpolation from disk to map coordinates
 - Reduce resolution by integration
 - Set assimilation weights for HipFT
 - Save in an HDF5 file format
+
+For the purpose of automated data processing, the script 
+magmap/maps/scripts/Update_Map_HMI.py can also be used/referenced to update maps 
+as new data comes in.
 
 ## Contact
 
@@ -85,5 +96,6 @@ James Turtle ([jturtle@predsci.com](mailto:jturtle@predsci.com))
 
 - James Turtle
 - Ronald M. Caplan
-- Jon A. Linker
 - Cooper Downs
+- Jon A. Linker
+
