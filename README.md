@@ -81,7 +81,7 @@ The process has five primary steps:
  - Set a layer of default data assimilation weights for use with [HipFT](https://github.com/predsci/hipft) as well as an additional layer with mu=cos(t) where `t` is the disk-to-limb angle for use with custom assimilation functions in HipFT
  - Save the final three-layer maps in 3D HDF5 files
 
-An example of running `magmap_disk2map.py`on a folder containing the output of `magmap_get_data.py` called here `magmap_data_disks` is:
+An example of running `magmap_disk2map.py`on a folder containing the output of `magmap_get_data.py` (called here `magmap_data_disks`) is:
 ```
 python magmap_disk2map.py magmap_data_disks
 ```
