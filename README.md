@@ -20,12 +20,14 @@ First, download or clone this repository. For example:
 ```
 git clone https://github.com/predsci/MagMAP.git
 ```
-
-MagMAP had been tested to work with specific versions of some python packages.  
-In order to facilitate this requirement, a conda recipe file is provided in `rsrc/conda_recipe_magmap.yml`.  
+ 
+A conda recipe file is provided in `rsrc/conda_recipe_magmap.yml`.  
 See [here](https://docs.anaconda.com/miniconda) for instructions on installing a conda environment.  
-Be sure to confirm conda is active in your current shell.  
-As some packages/versions are in the conda-forge channel, first check that it is in your python environment with:  
+This recipe is not necessary for using MagMAP, but does ensure that all dependencies are installed—and 
+that incompatible dependency versions are avoided. 
+
+To build this conda environment, first be sure that conda is active in your current shell.  
+As some packages/versions are in the conda-forge channel, check that it is in your python environment with:  
 ```
 conda config --show channels
 ```  
@@ -41,9 +43,10 @@ To activate the environment, use:
 ```
 conda activate magmap
 ```  
-This environment should be active before each use of `magmap`.
+This environment (or equivalent) should be active before each use of `magmap`.
   
-While in the directory of the repository clone, install the `magmap` package with:
+While in the directory of the repository clone, install the `magmap` package into 
+your environment with:
 ```  
 pip install ${PWD}  
 ```
@@ -52,7 +55,7 @@ pip install ${PWD}
 
 ## HOW TO RUN MAGMAP
 
-The standard use of MagMAP involves two steps:  data acquisition of magnetogram disk images, and mapping them into Carrington coordinate maps (along with converting the disk image data to radial magnetic field).  If using the conda magmap environment described above, ensure it is active before running `magmap`.
+The standard use of MagMAP involves two steps:  1) data acquisition of magnetogram disk images, and 2) mapping them into Carrington coordinate maps (along with converting the disk image data to radial magnetic field).  If using the conda magmap environment described above, ensure it is active before running `magmap`.
 
 ### Data Acquisition
 
@@ -67,11 +70,11 @@ Run `python magmap_get_data.py -h` for more information on these options.
   
 The script can also update an existing folder of disk data with the most recently available data by running the script with the output directory set to the existing folder.   
    
-For another example script on how `magmap` can update an existing directory with the most recent HMI magnetograms, see `magmap/data/scripts/Update_local_HMI.py`.
+For another example script on how `magmap` can update an existing directory with the most recent HMI magnetograms, see `magmap/scripts/Update_local_HMI.py`.
   
 ### Processing and Mapping Data
 
-Once a directory of HMI disk magnetogram image data exists, the script `bin/magmap_disk2map.py` is used to convert the LOS magnetogram images into radial magnetic field values (Br) and mapped to longitude-colatitude Carrington coordinate maps.  
+Once HMI disk magnetogram image data has been downloaded, the script `bin/magmap_disk2map.py` is used to convert line-of-sight to radial magnetic field values (Br) and to interpolate to a longitude-colatitude Carrington coordinate map.  
 
 The process has five primary steps:
   
@@ -89,15 +92,14 @@ The script will process and map the disk data and store them in an orderly direc
 
 The script has optional arguments to set the start and end date/time (for processing subsets), the theta and phi resolutions of the final maps, the assumed radius of the disk data (in solar radii), the theta and phi resolutions used for the high resolution interpolation map, output directory, and index file name.  Run `python magmap_disk2map.py -h` for more information on these options.
 
-Once a map output folder has generated, it can be directly used with HipFT (see instructions there).
+Once a map output folder is generated, it can be directly used with HipFT (see instructions [there](https://github.com/predsci/hipft)).
 
 The script can also be used to update a pre-existing map output folder by rerunning it on the same disk data folder with the same output folder name.
 
-For the purpose of automated data processing, an alternative script  `magmap/maps/scripts/Update_Map_HMI.py` can be used/referenced to update maps as new data comes in.
+For the purpose of automated data processing, an alternative script `magmap/scripts/Update_Map_HMI.py` can be used/referenced to update maps as new data comes in.
 
-### Custom Use Cases
-
-MagMAP is a python library at its core, and while the above two executable scripts are suitable for most general use cases, the library contains additional features and customizations when imported and used in a custom script.  See the `magmap/scripts` folder for examples.
+<!--### Custom Use Cases
+MagMAP is a python library at its core, and while the above two executable scripts are suitable for most general use cases, the library contains additional features and customizations when imported and used in a custom script.  See the `magmap/scripts` folder for examples.-->
 
 --------------------------------
   
@@ -109,5 +111,5 @@ James Turtle ([jturtle@predsci.com](mailto:jturtle@predsci.com))
 
 - James Turtle
 - Ronald M. Caplan
-- Jon A. Linker
 - Cooper Downs
+- Jon A. Linker
