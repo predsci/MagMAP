@@ -183,7 +183,7 @@ def run(args):
       available_map = pd.read_csv(os.path.join(map_data_dir, "index_files", index_file_maps))
       available_map['date'] = pd.to_datetime(available_map['target_datetime_utc'], format="%Y-%m-%dT%H:%M:%S").dt.tz_localize('UTC')
     else:
-      print("\nNo index file found in output directory, attempting to read files in the directly, otherwise will create it...")
+      print("\nNo index file found in output directory, constructing index info from filenames...")
       available_map = io_helpers.read_db_dir(map_data_dir)
 
     # select all maps between these dates
